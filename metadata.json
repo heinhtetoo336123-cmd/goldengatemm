@@ -1,0 +1,6 @@
+{
+  "name": "Golden Gate MM",
+  "description": "Mobile-first offline-first Progressive Web App for Myanmar Immigration Officers in the field.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

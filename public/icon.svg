@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="50%" stop-color="#e0e7ff"/>
+      <stop offset="100%" stop-color="#93c5fd"/>
+    </linearGradient>
+  </defs>
+  <!-- Outer Rounded Rectangle -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  <!-- Decorative Ring -->
+  <circle cx="256" cy="256" r="220" fill="none" stroke="url(#blueGrad)" stroke-width="6" stroke-opacity="0.4"/>
+  <circle cx="256" cy="256" r="208" fill="none" stroke="url(#blueGrad)" stroke-width="2" stroke-opacity="0.2"/>
+  
+  <!-- Golden Gate Arches Icon in Pure White & Light Blue -->
+  <g transform="translate(256, 230) scale(1.1)">
+    <!-- Central Shield / Gate Arch -->
+    <path d="M -100 100 L -100 -20 Q 0 -110 100 -20 L 100 100 Z" fill="none" stroke="url(#blueGrad)" stroke-width="16" stroke-linejoin="round"/>
+    <!-- Inner Arch -->
+    <path d="M -70 100 L -70 -10 Q 0 -80 70 -10 L 70 100 Z" fill="none" stroke="url(#blueGrad)" stroke-width="8" stroke-linejoin="round" opacity="0.8"/>
+    <!-- Star of Myanmar -->
+    <polygon points="0,-45 12,-12 45,-12 18,8 28,42 0,22 -28,42 -18,8 -45,-12 -12,-12" fill="url(#blueGrad)"/>
+    <!-- Myanmar Text Emblem MM -->
+    <text x="0" y="115" text-anchor="middle" fill="url(#blueGrad)" font-family="sans-serif" font-weight="bold" font-size="28" letter-spacing="4">IMMIGRATION</text>
+  </g>
+  <!-- Golden Gate MM Label -->
+  <text x="256" y="440" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-weight="800" font-size="32" letter-spacing="2">GOLDEN GATE MM</text>
+</svg>

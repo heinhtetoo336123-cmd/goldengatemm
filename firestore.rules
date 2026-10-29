@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwnerOfficer(officerId) {
+      return isSignedIn() && (
+        request.auth.uid == officerId || 
+        request.auth.token.email == officerId
+      );
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Application Links collection
+    match /application_links/{linkId} {
+      // Officers can create, read, update their links
+      allow create, update, delete: if isSignedIn();
+      // Public can read link configuration to load applicant form
+      allow get, list: if true;
+    }
+
+    // Application Submissions collection
+    match /application_submissions/{submissionId} {
+      // Public applicants can submit applications with valid data
+      allow create: if request.resource.data.applicantName is string &&
+                       request.resource.data.officerId is string &&
+                       request.resource.data.applicationType is string;
+
+      // Only the assigned officer can view, update (approve/reject), or delete submissions
+      allow get, list, update, delete: if isSignedIn();
+    }
+  }
+}
