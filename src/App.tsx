@@ -136,7 +136,6 @@ export default function App() {
           <ShieldCheck className="w-7 h-7" />
         </div>
         <p className="text-sm font-bold text-slate-900 dark:text-white">Golden Gate MM</p>
-        <p className="text-xs text-slate-500 dark:text-slate-400">လုံခြုံရေး စိစစ်နေပါသည်...</p>
       </div>
     );
   }

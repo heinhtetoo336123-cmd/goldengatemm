@@ -695,14 +695,9 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
     <div className="space-y-5 pb-28 max-w-4xl mx-auto w-full overflow-x-hidden">
       {/* iOS 27 Large Title Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 pt-1 px-1">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-blue-700 dark:text-blue-400">
-            Official Correspondence
-          </p>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight mt-0.5">
-            ရုံးစာနှင့် ကြေးနန်း
-          </h1>
-        </div>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+          ရုံးစာနှင့် ကြေးနန်း
+        </h1>
         <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 self-start sm:self-auto">
           <Check className="w-3.5 h-3.5 shrink-0" />
           <span>{autoSaveStatus}</span>
@@ -2044,9 +2039,6 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
               </div>
               <div>
                 <h3 className="text-sm font-extrabold">Preset ဖျက်ပစ်ရန်</h3>
-                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                  ဤ Preset စာပုံစံအား ဖျက်ပစ်ရန် သေချာပါသလား။
-                </p>
               </div>
             </div>
             <div className="flex justify-end gap-2">

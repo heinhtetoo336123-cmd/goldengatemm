@@ -304,14 +304,9 @@ export const RecordsManager: React.FC = () => {
     <div className="space-y-5 pb-28 max-w-4xl mx-auto w-full overflow-x-hidden">
       {/* Large Title Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 pt-1 px-1">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-blue-700 dark:text-blue-400">
-            Directory & Records
-          </p>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight mt-0.5">
-            မှတ်တမ်းများ
-          </h1>
-        </div>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+          မှတ်တမ်းများ
+        </h1>
 
         <div className="flex items-center gap-2 flex-wrap">
           <button
@@ -503,7 +498,7 @@ export const RecordsManager: React.FC = () => {
             <div className="ios-grouped-card p-10 text-center space-y-2">
               <Users className="w-8 h-8 text-slate-300 dark:text-zinc-600 mx-auto" />
               <p className="text-xs text-slate-600 dark:text-zinc-300 font-bold">
-                အရာရှိ စာရင်း မတွေ့ရှိပါ
+                အရာရှိ မရှိသေးပါ
               </p>
             </div>
           ) : (
@@ -673,7 +668,7 @@ export const RecordsManager: React.FC = () => {
             <div className="ios-grouped-card p-10 text-center space-y-2">
               <FolderArchive className="w-8 h-8 text-slate-300 dark:text-zinc-600 mx-auto" />
               <h4 className="text-xs font-bold text-slate-500 dark:text-zinc-400">
-                သိမ်းဆည်းထားသော မှတ်တမ်း မရှိသေးပါ
+                မှတ်တမ်း မရှိသေးပါ
               </h4>
             </div>
           ) : (

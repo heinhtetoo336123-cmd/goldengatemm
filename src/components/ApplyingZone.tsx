@@ -121,7 +121,7 @@ export const ApplyingZone: React.FC<ApplyingZoneProps> = ({ currentUser }) => {
       setGeneratedLink(newLink);
       await reloadData();
     } catch {
-      setStatusBanner({ type: 'error', text: 'လင့်ခ်အသစ် သိမ်းဆည်းရာတွင် အခက်အခဲရှိပါသည်။ အင်တာနက်နှင့် Firestore Permission ကို စစ်ဆေးပါ။' });
+      setStatusBanner({ type: 'error', text: 'သိမ်းဆည်းမရပါ။' });
       setTimeout(() => setStatusBanner(null), 4000);
     } finally {
       setIsGenerating(false);
@@ -144,17 +144,17 @@ export const ApplyingZone: React.FC<ApplyingZoneProps> = ({ currentUser }) => {
 
   const handleShareViber = (link: ApplicationLink) => {
     const url = getFullShareUrl(link.token);
-    const text = `${getTypeLabelMM(link.applicationType)} လျှောက်ထားရန် သီးသန့်လင့်ခ်\nတာဝန်ခံ: ${link.officerName} (${link.townshipName})\n\nအောက်ပါ လင့်ခ်မှတစ်ဆင့် အချက်အလက်နှင့် စာရွက်စာတမ်းများ တင်သွင်းပါ-\n${url}`;
+    const text = `${getTypeLabelMM(link.applicationType)}\n${link.officerName} (${link.townshipName})\n${url}`;
     window.location.href = `viber://forward?text=${encodeURIComponent(text)}`;
   };
 
   const handleRevokeLink = async (token: string) => {
     try {
       await db.revokeApplicationLinkAsync(token);
-      setStatusBanner({ type: 'success', text: `လင့်ခ် ${token} အား ပိတ်သိမ်းပြီးပါပြီ။` });
+      setStatusBanner({ type: 'success', text: `${token} ပိတ်သိမ်းပြီး` });
       await reloadData();
     } catch {
-      setStatusBanner({ type: 'error', text: `လင့်ခ် ${token} အား ပိတ်သိမ်းရာတွင် အခက်အခဲရှိပါသည်။` });
+      setStatusBanner({ type: 'error', text: `${token} ပိတ်သိမ်းမရပါ` });
     }
     setTimeout(() => setStatusBanner(null), 3500);
   };
@@ -168,9 +168,9 @@ export const ApplyingZone: React.FC<ApplyingZoneProps> = ({ currentUser }) => {
           prev ? { ...prev, status: newStatus, officerNotes: officerNoteInput.trim() } : null
         );
       }
-      setStatusBanner({ type: 'success', text: 'လျှောက်လွှာ စိစစ်မှု အဆင့်အတန်းကို သိမ်းဆည်းပြီးပါပြီ။' });
+      setStatusBanner({ type: 'success', text: 'သိမ်းဆည်းပြီး' });
     } catch {
-      setStatusBanner({ type: 'error', text: 'လျှောက်လွှာ အဆင့်အတန်း ပြင်ဆင်ရာတွင် အခက်အခဲရှိပါသည်။' });
+      setStatusBanner({ type: 'error', text: 'ပြင်ဆင်မရပါ' });
     }
     setTimeout(() => setStatusBanner(null), 3500);
   };
@@ -223,24 +223,19 @@ export const ApplyingZone: React.FC<ApplyingZoneProps> = ({ currentUser }) => {
   return (
     <div className="space-y-5 pb-28 max-w-5xl mx-auto w-full">
       {/* iOS 27 Large Title Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 px-1">
-        <div className="space-y-0.5">
-          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 tabular-nums">
-            တိုက်ရိုက်ဒေတာလမ်းကြောင်း · စိစစ်ရန် {pendingCount} စောင် · ထုတ်ပေးလင့်ခ် {links.length} ခု
-          </p>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Applying Zone (လျှောက်လွှာတင်ခြင်း ဇုန်)
-          </h1>
-        </div>
+      <div className="flex items-center justify-between gap-3 px-1">
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+          Applying Zone
+        </h1>
 
         <button
           type="button"
           onClick={reloadData}
           disabled={isRefreshing}
-          className="self-start sm:self-auto min-h-[44px] px-4 py-2 rounded-2xl bg-white dark:bg-[#1C1C1E] border border-slate-900/10 dark:border-white/10 text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 ios-press cursor-pointer whitespace-nowrap"
+          className="min-h-[44px] px-4 py-2 rounded-2xl bg-white dark:bg-[#1C1C1E] border border-slate-900/10 dark:border-white/10 text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 ios-press cursor-pointer whitespace-nowrap"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-          <span>ပြန်လည်စစ်ဆေးမည်</span>
+          <span>Refresh</span>
         </button>
       </div>
 
@@ -307,35 +302,30 @@ export const ApplyingZone: React.FC<ApplyingZoneProps> = ({ currentUser }) => {
       {activeSubTab === 'GENERATE' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
           <div className="lg:col-span-7 ios-grouped-card p-5 sm:p-6 space-y-4">
-            <div className="space-y-1">
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                သီးသန့် လျှောက်လွှာလင့်ခ် နှင့် QR ထုတ်ပေးခြင်း
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                ဤလင့်ခ်မှ တင်သွင်းသော လျှောက်လွှာများသည် သင့်အကောင့် ({currentUser?.name}) ထံသို့သာ တိုက်ရိုက်ရောက်ရှိပါမည်။
-              </p>
-            </div>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+              လင့်ခ် နှင့် QR ထုတ်ရန်
+            </h2>
 
             <form onSubmit={handleGenerateLink} className="space-y-4 text-xs">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  ၁။ လျှောက်လွှာ အမျိုးအစား
+                  ၁။ အမျိုးအစား
                 </label>
                 <select
                   value={selectedAppType}
                   onChange={(e) => setSelectedAppType(e.target.value as ApplicationType)}
                   className="w-full min-h-[44px] bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white font-semibold focus:border-[#0055D4] focus:outline-none"
                 >
-                  <option value="NRC_APP">နိုင်ငံသားစိစစ်ရေးကတ်ပြား လျှောက်ထားခြင်း (NRC Application)</option>
-                  <option value="HOUSEHOLD_APP">အိမ်ထောင်စုလူဦးရေစာရင်း လျှောက်ထားခြင်း (ပုံစံ ၆၆/၆)</option>
-                  <option value="DECEASED_REMOVAL">အိမ်ထောင်စုစာရင်းမှ သေဆုံးသူ ပယ်ဖျက်ခြင်း</option>
-                  <option value="BIRTH_ADDITION">အိမ်ထောင်စုစာရင်းသို့ မွေးဖွားသူ ထည့်သွင်းခြင်း</option>
+                  <option value="NRC_APP">နိုင်ငံသားစိစစ်ရေးကတ်ပြား (NRC)</option>
+                  <option value="HOUSEHOLD_APP">အိမ်ထောင်စုစာရင်း (ပုံစံ ၆၆/၆)</option>
+                  <option value="DECEASED_REMOVAL">သေဆုံးသူ ပယ်ဖျက်ခြင်း</option>
+                  <option value="BIRTH_ADDITION">မွေးဖွားသူ ထည့်သွင်းခြင်း</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  ၂။ သက်ဆိုင်ရာ မြို့နယ် / ရုံးစခန်း
+                  ၂။ မြို့နယ် / ရုံး
                 </label>
                 <input
                   type="text"
@@ -348,13 +338,13 @@ export const ApplyingZone: React.FC<ApplyingZoneProps> = ({ currentUser }) => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  ၃။ လျှောက်ထားသူထံ ညွှန်ကြားချက် မှတ်စု (Optional)
+                  ၃။ မှတ်စု
                 </label>
                 <input
                   type="text"
                   value={customNote}
                   onChange={(e) => setCustomNote(e.target.value)}
-                  placeholder="ရုံးချိန်အတွင်း စာရွက်စာတမ်းမူရင်း ယူဆောင်လာပါရန်..."
+                  placeholder="Optional"
                   className="w-full min-h-[44px] bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:border-[#0055D4] focus:outline-none"
                 />
               </div>
@@ -365,7 +355,7 @@ export const ApplyingZone: React.FC<ApplyingZoneProps> = ({ currentUser }) => {
                 className="w-full min-h-[48px] py-3 px-4 rounded-2xl bg-[#0055D4] hover:bg-[#0A46B8] text-white font-bold text-xs shadow-sm flex items-center justify-center gap-2 ios-press cursor-pointer disabled:opacity-60"
               >
                 <QrCode className="w-4 h-4" />
-                <span>{isGenerating ? 'ထုတ်ပေးနေပါသည်...' : 'သီးသန့် လင့်ခ် နှင့် QR Code ထုတ်ယူမည်'}</span>
+                <span>{isGenerating ? 'ထုတ်နေသည်...' : 'လင့်ခ် နှင့် QR ထုတ်မည်'}</span>
               </button>
             </form>
           </div>
@@ -435,11 +425,8 @@ export const ApplyingZone: React.FC<ApplyingZoneProps> = ({ currentUser }) => {
             ) : (
               <div className="py-12 text-center space-y-2">
                 <QrCode className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
-                <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                  လင့်ခ်နှင့် QR Code ဤနေရာတွင် ပေါ်လာပါမည်
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  ဘယ်ဘက်ရှိ အချက်အလက်များကို ရွေးချယ်၍ ထုတ်ယူပါ
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  QR နှင့် လင့်ခ်
                 </p>
               </div>
             )}
@@ -454,7 +441,7 @@ export const ApplyingZone: React.FC<ApplyingZoneProps> = ({ currentUser }) => {
             <div className="p-10 text-center space-y-2">
               <QrCode className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                ထုတ်ပေးထားသော သီးသန့်လင့်ခ် မရှိသေးပါ
+                လင့်ခ် မရှိသေးပါ
               </p>
             </div>
           ) : (
@@ -556,7 +543,7 @@ export const ApplyingZone: React.FC<ApplyingZoneProps> = ({ currentUser }) => {
               <div className="p-10 text-center space-y-2">
                 <FileText className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
                 <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  လက်ခံရရှိထားသော လျှောက်လွှာ မရှိသေးပါ
+                  လျှောက်လွှာ မရှိသေးပါ
                 </p>
               </div>
             ) : (
@@ -687,14 +674,11 @@ export const ApplyingZone: React.FC<ApplyingZoneProps> = ({ currentUser }) => {
               {(activeSubmission.status === 'APPROVED' || activeSubmission.status === 'REJECTED') && !isAdminUser ? (
                 <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-slate-300 space-y-1">
                   <p className="font-bold text-slate-900 dark:text-white">
-                    စိစစ်ဆုံးဖြတ်ချက် အတည်ပြုပြီး ({getStatusLabelMM(activeSubmission.status)})
+                    {getStatusLabelMM(activeSubmission.status)} (Admin မှသာ ပြင်ဆင်နိုင်သည်)
                   </p>
                   {activeSubmission.officerNotes && (
-                    <p className="text-[11px]">မှတ်ချက်: {activeSubmission.officerNotes}</p>
+                    <p className="text-[11px]">{activeSubmission.officerNotes}</p>
                   )}
-                  <p className="text-[11px] text-slate-500">
-                    အတည်ပြု/ငြင်းပယ်ပြီးသော လျှောက်လွှာများကို Admin မှသာ ပြန်လည်ပြင်ဆင်နိုင်ပါသည်။
-                  </p>
                 </div>
               ) : (
                 <>

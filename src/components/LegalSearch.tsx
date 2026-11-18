@@ -18,7 +18,7 @@ export const LegalSearch: React.FC = () => {
     setErrorBanner(null);
 
     if (!file.type.includes('pdf') && !file.name.endsWith('.pdf')) {
-      setErrorBanner('ကျေးဇူးပြု၍ PDF ဖိုင်အမျိုးအစားသာ တင်သွင်းပါရန်။');
+      setErrorBanner('PDF ဖိုင်သာ ရွေးချယ်ပါ။');
       return;
     }
 
@@ -30,7 +30,7 @@ export const LegalSearch: React.FC = () => {
       setActivePageNum(1);
     } catch (err) {
       console.error('PDF Upload Error:', err);
-      setErrorBanner('PDF စာအုပ် တင်သွင်းစဉ် ဖတ်ရှုရန် အဆင်မပြေပါ။ ဖိုင်အပြည့်အစုံ ဖြစ်ကြောင်း စိစစ်ပါရန်။');
+      setErrorBanner('PDF ဖတ်ရှုမရပါ။');
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -78,15 +78,10 @@ export const LegalSearch: React.FC = () => {
   return (
     <div className="space-y-5 pb-28 w-full max-w-4xl mx-auto overflow-x-hidden">
       {/* iOS 27 Large Title & Upload Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 pt-1 px-1">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-blue-700 dark:text-blue-400">
-            Immigration Law Library
-          </p>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5 mt-0.5">
-            <span>ဥပဒေ စာအုပ်များ</span>
-          </h1>
-        </div>
+      <div className="flex items-center justify-between gap-3 pt-1 px-1">
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+          ဥပဒေ စာအုပ်များ
+        </h1>
 
         <div className="shrink-0">
           <input
@@ -103,7 +98,7 @@ export const LegalSearch: React.FC = () => {
             className="min-h-[44px] px-4 py-2.5 rounded-2xl bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-2 transition ios-press whitespace-nowrap disabled:opacity-50"
           >
             <Upload className="w-4 h-4 shrink-0" />
-            <span>{isUploading ? 'PDF ဖတ်ရှုနေသည်...' : 'PDF ဥပဒေစာအုပ် ထည့်မည်'}</span>
+            <span>{isUploading ? 'ဖတ်နေသည်...' : 'PDF ထည့်မည်'}</span>
           </button>
         </div>
       </div>
@@ -150,7 +145,6 @@ export const LegalSearch: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-[11px]">
-          <span className="text-slate-500 dark:text-zinc-400 font-semibold shrink-0 pr-1">အမြန်ရှာရန်:</span>
           {sampleSearchQueries.map((query, idx) => (
             <button
               key={idx}
@@ -168,13 +162,12 @@ export const LegalSearch: React.FC = () => {
       {searchQuery.trim() && (
         <div className="ios-grouped-card p-4 space-y-3 border-blue-200/80 dark:border-blue-900/50">
           <div className="flex items-center justify-between text-xs font-bold text-slate-900 dark:text-white">
-            <span>ရှာဖွေတွေ့ရှိချက်များ ({searchResults.length})</span>
-            <span className="text-[11px] text-blue-700 dark:text-blue-400">PDF Search</span>
+            <span>တွေ့ရှိချက် ({searchResults.length})</span>
           </div>
 
           {searchResults.length === 0 ? (
             <p className="text-xs text-slate-500 dark:text-zinc-400 py-2">
-              "{searchQuery}" နှင့် ကိုက်ညီသော စာပိုဒ် မတွေ့ရှိပါ။
+              မတွေ့ရှိပါ
             </p>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-zinc-800 max-h-56 overflow-y-auto">
@@ -288,7 +281,7 @@ export const LegalSearch: React.FC = () => {
             className="min-h-[44px] px-4 py-2 rounded-2xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-900 dark:text-white font-bold text-xs flex items-center gap-2 transition ios-press"
           >
             {copiedText ? <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> : <FileText className="w-4 h-4" />}
-            <span>{copiedText ? 'ကူးယူပြီးပါပြီ' : 'စာမျက်နှာ စာသား ကူးယူမည်'}</span>
+            <span>{copiedText ? 'ကူးယူပြီး' : 'ကူးယူမည်'}</span>
           </button>
 
           {activeBook.pdfDataUrl && (

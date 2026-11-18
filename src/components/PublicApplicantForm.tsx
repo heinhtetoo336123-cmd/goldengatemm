@@ -130,12 +130,12 @@ export const PublicApplicantForm: React.FC<PublicApplicantFormProps> = ({ token,
     setFormError(null);
 
     if (!linkConfig || linkConfig.status !== 'ACTIVE') {
-      setFormError('ဤလျှောက်လွှာလင့်ခ်သည် အကျုံးမဝင်တော့ပါ သို့မဟုတ် ပိတ်သိမ်းပြီးဖြစ်ပါသည်။');
+      setFormError('လင့်ခ် ပိတ်သိမ်းထားပါသည်။');
       return;
     }
 
     if (!applicantName.trim() || !applicantPhone.trim()) {
-      setFormError('ကျေးဇူးပြု၍ လျှောက်ထားသူ အမည်နှင့် ဖုန်းနံပါတ် အပြည့်အစုံ ဖြည့်သွင်းပါ။');
+      setFormError('အမည်နှင့် ဖုန်းနံပါတ် ဖြည့်ပါ။');
       setStep(1);
       return;
     }
@@ -168,7 +168,7 @@ export const PublicApplicantForm: React.FC<PublicApplicantFormProps> = ({ token,
       });
       setSubmittedResult(newSub);
     } catch {
-      setFormError('လျှောက်လွှာ တင်သွင်းရာတွင် အခက်အခဲရှိနေပါသည်။ အင်တာနက် သို့မဟုတ် လင့်ခ်အခြေအနေကို စစ်ဆေး၍ ထပ်မံကြိုးစားပါ။');
+      setFormError('တင်သွင်းမရပါ။ ထပ်မံကြိုးစားပါ။');
     } finally {
       setSubmitting(false);
     }
@@ -192,7 +192,7 @@ export const PublicApplicantForm: React.FC<PublicApplicantFormProps> = ({ token,
   if (linkLoading) {
     return (
       <div className="min-h-screen bg-[#F2F2F7] dark:bg-black flex items-center justify-center p-6">
-        <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">လျှောက်လွှာဖောင် ဖွင့်လှစ်နေပါသည်...</p>
+        <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">ဖွင့်နေပါသည်...</p>
       </div>
     );
   }
@@ -204,19 +204,17 @@ export const PublicApplicantForm: React.FC<PublicApplicantFormProps> = ({ token,
   if (!linkConfig || linkConfig.status !== 'ACTIVE' || isExpired) {
     return (
       <div className="min-h-screen bg-[#F2F2F7] dark:bg-black flex items-center justify-center p-4">
-        <div className="w-full max-w-md ios-grouped-card p-6 text-center space-y-4">
+        <div className="w-full max-w-sm ios-grouped-card p-6 text-center space-y-4">
           <AlertCircle className="w-10 h-10 text-rose-600 mx-auto" />
           <h2 className="text-base font-bold text-slate-900 dark:text-white">
             {!linkConfig
-              ? 'လျှောက်လွှာလင့်ခ် မတွေ့ရှိပါ'
+              ? 'လင့်ခ် မတွေ့ရှိပါ'
               : isExpired
-              ? 'လျှောက်လွှာလင့်ခ် သက်တမ်းကုန်ဆုံးသွားပါပြီ'
-              : 'လျှောက်လွှာလင့်ခ် ပိတ်သိမ်းထားပါသည်'}
+              ? 'လင့်ခ် သက်တမ်းကုန်ပြီး'
+              : 'လင့်ခ် ပိတ်သိမ်းပြီး'}
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-            {!linkConfig
-              ? `ဤလျှောက်လွှာလင့်ခ် (${token}) သည် မမှန်ကန်ပါ သို့မဟုတ် ပယ်ဖျက်ထားပြီး ဖြစ်နိုင်ပါသည်။ သက်ဆိုင်ရာ လဝက အရာရှိထံမှ လင့်ခ်အသစ် ပြန်လည်တောင်းခံပါ။`
-              : `ဤလျှောက်လွှာလင့်ခ် (${token}) အား အသုံးပြု၍ မရတော့ပါ။ သက်ဆိုင်ရာ အရာရှိထံ ဆက်သွယ်ပါ။`}
+          <p className="text-xs font-mono text-slate-500 dark:text-slate-400">
+            {token}
           </p>
           {onBackToApp && (
             <button
@@ -242,12 +240,9 @@ export const PublicApplicantForm: React.FC<PublicApplicantFormProps> = ({ token,
 
           <div className="text-center space-y-1">
             <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-              လျှောက်လွှာ အောင်မြင်စွာ တင်သွင်းပြီးပါပြီ
+              တင်သွင်းပြီးပါပြီ
             </p>
             <h2 className="text-lg font-extrabold">{getTitleMM(submittedResult.applicationType)}</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              တာဝန်ခံ အရာရှိထံသို့ တိုက်ရိုက် ပေးပို့စိစစ်လျက် ရှိပါသည်
-            </p>
           </div>
 
           <div className="divide-y divide-slate-200/70 dark:divide-white/10 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 text-xs">
@@ -282,17 +277,13 @@ export const PublicApplicantForm: React.FC<PublicApplicantFormProps> = ({ token,
             </div>
           </div>
 
-          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed text-center">
-            လျှောက်လွှာ စိစစ်ပြီးပါက တာဝန်ခံ အရာရှိမှ ဖုန်း သို့မဟုတ် Viber မှတစ်ဆင့် ဆက်သွယ် အကြောင်းကြားပေးမည် ဖြစ်ပါသည်။
-          </p>
-
           {onBackToApp && (
             <button
               type="button"
               onClick={onBackToApp}
               className="w-full min-h-[44px] py-3 rounded-2xl bg-[#0055D4] text-white font-bold text-xs ios-press"
             >
-              Golden Gate MM သို့ ပြန်သွားမည်
+              ပြန်သွားမည်
             </button>
           )}
         </div>
@@ -316,17 +307,13 @@ export const PublicApplicantForm: React.FC<PublicApplicantFormProps> = ({ token,
             </button>
           )}
 
-          <p className="text-[11px] font-medium text-blue-100 flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
-            <span>လူဝင်မှုကြီးကြပ်ရေး ဦးစီးဌာန · တရားဝင် လျှောက်လွှာပုံစံ</span>
-          </p>
-
-          <h1 className="text-base sm:text-lg font-extrabold tracking-tight">
-            {getTitleMM(appType)}
+          <h1 className="text-base sm:text-lg font-extrabold tracking-tight flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-amber-300 shrink-0" />
+            <span>{getTitleMM(appType)}</span>
           </h1>
 
           <p className="text-[11px] text-blue-100/90 font-medium">
-            {linkConfig?.townshipName || 'မြို့နယ်ဦးစီးမှူးရုံး'} · တာဝန်ခံ {linkConfig?.officerName || 'အရာရှိ'}
+            {linkConfig?.townshipName || 'မြို့နယ်ရုံး'} · {linkConfig?.officerName || 'အရာရှိ'}
           </p>
         </div>
 
@@ -674,14 +661,14 @@ export const PublicApplicantForm: React.FC<PublicApplicantFormProps> = ({ token,
                 })}
               </div>
 
-              <label className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 flex items-start gap-2.5 cursor-pointer">
+              <label className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 flex items-center gap-2.5 cursor-pointer">
                 <input
                   type="checkbox"
                   required
-                  className="mt-0.5 w-4 h-4 accent-[#0055D4] rounded cursor-pointer"
+                  className="w-4 h-4 accent-[#0055D4] rounded cursor-pointer"
                 />
-                <span className="text-[11px] leading-relaxed font-semibold text-slate-700 dark:text-slate-300">
-                  အထက်ဖော်ပြပါ အချက်အလက်များနှင့် ပူးတွဲတင်ပြထားသော စာရွက်စာတမ်းများသည် အမှန်တကယ် မှန်ကန်ကြောင်း ကတိပြုပါသည်။
+                <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                  အချက်အလက်များ မှန်ကန်ကြောင်း အတည်ပြုပါသည်။
                 </span>
               </label>
 
