@@ -2,40 +2,234 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwnerOfficer(officerId) {
-      return isSignedIn() && (
-        request.auth.uid == officerId || 
-        request.auth.token.email == officerId
-      );
-    }
-
-    // Default deny catch-all
+    // Global safety net: default deny everything
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Application Links collection
-    match /application_links/{linkId} {
-      // Officers can create, read, update their links
-      allow create, update, delete: if isSignedIn();
-      // Public can read link configuration to load applicant form
-      allow get, list: if true;
+    // Core security primitives
+    function incoming() {
+      return request.resource.data;
     }
 
-    // Application Submissions collection
-    match /application_submissions/{submissionId} {
-      // Public applicants can submit applications with valid data
-      allow create: if request.resource.data.applicantName is string &&
-                       request.resource.data.officerId is string &&
-                       request.resource.data.applicationType is string;
+    function existing() {
+      return resource.data;
+    }
 
-      // Only the assigned officer can view, update (approve/reject), or delete submissions
-      allow get, list, update, delete: if isSignedIn();
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmailDocId(id) {
+      return id is string && id.size() >= 3 && id.size() <= 180 && id.matches('^[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null
+        && request.auth.token.email is string
+        && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdminEmail() {
+      return isSignedIn() && request.auth.token.email.lower() == 'heinhtetoo336123@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdminEmail() || (
+        isSignedIn()
+        && exists(/databases/$(database)/documents/authorized_officers/$(request.auth.token.email.lower()))
+        && get(/databases/$(database)/documents/authorized_officers/$(request.auth.token.email.lower())).data.active == true
+        && get(/databases/$(database)/documents/authorized_officers/$(request.auth.token.email.lower())).data.role == 'ADMIN'
+      );
+    }
+
+    function isApprovedOfficer() {
+      return isBootstrappedAdminEmail() || (
+        isSignedIn()
+        && exists(/databases/$(database)/documents/authorized_officers/$(request.auth.token.email.lower()))
+        && get(/databases/$(database)/documents/authorized_officers/$(request.auth.token.email.lower())).data.active == true
+      );
+    }
+
+    function isLinkOwner(data) {
+      return isSignedIn() && (
+        data.officerId == request.auth.uid
+        || data.officerEmail.lower() == request.auth.token.email.lower()
+      );
+    }
+
+    // Validation blueprint: AuthorizedOfficer
+    function isValidAuthorizedOfficer(data, docEmail) {
+      return data.keys().hasAll(['email', 'role', 'active', 'createdAt'])
+        && data.keys().hasOnly(['email', 'role', 'active', 'addedBy', 'createdAt', 'updatedAt'])
+        && data.email is string
+        && data.email.size() >= 3 && data.email.size() <= 180
+        && data.email.lower() == docEmail.lower()
+        && data.role in ['ADMIN', 'OFFICER', 'INSPECTOR', 'SUPERVISOR']
+        && data.active is bool
+        && (!('addedBy' in data) || (data.addedBy is string && data.addedBy.size() <= 180));
+    }
+
+    // Validation blueprint: ApplicationLink
+    function isValidApplicationLink(data) {
+      return data.keys().hasAll(['id', 'token', 'officerId', 'officerEmail', 'officerName', 'officerBadge', 'officerStation', 'applicationType', 'townshipName', 'status', 'createdAt', 'expiresAt'])
+        && data.keys().hasOnly(['id', 'token', 'officerId', 'officerEmail', 'officerName', 'officerBadge', 'officerStation', 'applicationType', 'townshipName', 'customNote', 'createdAt', 'expiresAt', 'updatedAt', 'status', 'submissionCount'])
+        && data.id is string && data.id.size() >= 1 && data.id.size() <= 128 && data.id.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.token is string && data.token.size() >= 4 && data.token.size() <= 64 && data.token.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.officerId is string && data.officerId.size() >= 1 && data.officerId.size() <= 128
+        && data.officerEmail is string && data.officerEmail.size() >= 3 && data.officerEmail.size() <= 180
+        && data.officerName is string && data.officerName.size() >= 1 && data.officerName.size() <= 120
+        && data.officerBadge is string && data.officerBadge.size() <= 64
+        && data.officerStation is string && data.officerStation.size() <= 200
+        && data.applicationType in ['NRC_APP', 'HOUSEHOLD_APP', 'DECEASED_REMOVAL', 'BIRTH_ADDITION']
+        && data.townshipName is string && data.townshipName.size() >= 1 && data.townshipName.size() <= 160
+        && (!('customNote' in data) || (data.customNote is string && data.customNote.size() <= 500))
+        && data.status in ['ACTIVE', 'EXPIRED', 'REVOKED']
+        && data.expiresAt is string && data.expiresAt.size() <= 64
+        && (!('submissionCount' in data) || (data.submissionCount is int && data.submissionCount >= 0 && data.submissionCount <= 100000));
+    }
+
+    // Validation blueprint: ApplicationSubmission
+    function isValidApplicationSubmission(data) {
+      return data.keys().hasAll(['id', 'submissionRef', 'linkToken', 'officerId', 'officerEmail', 'applicationType', 'applicantName', 'applicantPhone', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'submissionRef', 'linkToken', 'officerId', 'officerEmail', 'applicationType',
+          'applicantName', 'applicantPhone', 'applicantNrc', 'applicantAddress',
+          'fatherName', 'motherName', 'dob', 'gender', 'bloodGroup', 'ethnicityReligion',
+          'nrcSubCategory', 'householdListNo', 'deceasedPersonName', 'dateOfDeath', 'causeOfDeath',
+          'childName', 'childDob', 'childGender', 'placeOfBirth',
+          'attachments', 'status', 'officerNotes', 'createdAt', 'updatedAt'
+        ])
+        && data.id is string && data.id.size() >= 1 && data.id.size() <= 128 && data.id.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.submissionRef is string && data.submissionRef.size() >= 4 && data.submissionRef.size() <= 64
+        && data.linkToken is string && data.linkToken.size() >= 4 && data.linkToken.size() <= 64 && data.linkToken.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.officerId is string && data.officerId.size() >= 1 && data.officerId.size() <= 128
+        && data.officerEmail is string && data.officerEmail.size() >= 3 && data.officerEmail.size() <= 180
+        && data.applicationType in ['NRC_APP', 'HOUSEHOLD_APP', 'DECEASED_REMOVAL', 'BIRTH_ADDITION']
+        && data.applicantName is string && data.applicantName.size() >= 1 && data.applicantName.size() <= 160
+        && data.applicantPhone is string && data.applicantPhone.size() >= 5 && data.applicantPhone.size() <= 40
+        && (!('applicantNrc' in data) || (data.applicantNrc is string && data.applicantNrc.size() <= 80))
+        && (!('applicantAddress' in data) || (data.applicantAddress is string && data.applicantAddress.size() <= 400))
+        && (!('fatherName' in data) || (data.fatherName is string && data.fatherName.size() <= 160))
+        && (!('motherName' in data) || (data.motherName is string && data.motherName.size() <= 160))
+        && (!('dob' in data) || (data.dob is string && data.dob.size() <= 40))
+        && (!('gender' in data) || data.gender in ['MALE', 'FEMALE'])
+        && (!('bloodGroup' in data) || (data.bloodGroup is string && data.bloodGroup.size() <= 16))
+        && (!('ethnicityReligion' in data) || (data.ethnicityReligion is string && data.ethnicityReligion.size() <= 120))
+        && (!('nrcSubCategory' in data) || data.nrcSubCategory in ['10_YEAR', '18_YEAR', 'REPLACEMENT', 'NEW'])
+        && (!('householdListNo' in data) || (data.householdListNo is string && data.householdListNo.size() <= 80))
+        && (!('deceasedPersonName' in data) || (data.deceasedPersonName is string && data.deceasedPersonName.size() <= 160))
+        && (!('dateOfDeath' in data) || (data.dateOfDeath is string && data.dateOfDeath.size() <= 40))
+        && (!('causeOfDeath' in data) || (data.causeOfDeath is string && data.causeOfDeath.size() <= 240))
+        && (!('childName' in data) || (data.childName is string && data.childName.size() <= 160))
+        && (!('childDob' in data) || (data.childDob is string && data.childDob.size() <= 40))
+        && (!('childGender' in data) || data.childGender in ['MALE', 'FEMALE'])
+        && (!('placeOfBirth' in data) || (data.placeOfBirth is string && data.placeOfBirth.size() <= 200))
+        && (!('attachments' in data) || (
+          data.attachments is list
+          && data.attachments.size() <= 6
+          && (data.attachments.size() == 0 || (
+            data.attachments[0] is map
+            && data.attachments[0].keys().hasAll(['title', 'dataUrl'])
+            && data.attachments[0].keys().hasOnly(['title', 'dataUrl'])
+            && data.attachments[0].title is string && data.attachments[0].title.size() <= 120
+            && data.attachments[0].dataUrl is string && data.attachments[0].dataUrl.size() <= 350000
+          ))
+        ))
+        && data.status in ['PENDING', 'APPROVED', 'REJECTED', 'REVISION_NEEDED']
+        && (!('officerNotes' in data) || (data.officerNotes is string && data.officerNotes.size() <= 1000));
+    }
+
+    // 1. Authorized Officers RBAC allowlist
+    match /authorized_officers/{officerEmail} {
+      allow get: if isValidEmailDocId(officerEmail) && isSignedIn() && (
+        request.auth.token.email.lower() == officerEmail.lower() || isAdmin()
+      );
+      allow list: if isAdmin();
+      allow create: if isValidEmailDocId(officerEmail)
+        && isAdmin()
+        && isValidAuthorizedOfficer(incoming(), officerEmail)
+        && incoming().createdAt == request.time
+        && (!('updatedAt' in incoming()) || incoming().updatedAt == request.time);
+      allow update: if isValidEmailDocId(officerEmail)
+        && isAdmin()
+        && isValidAuthorizedOfficer(incoming(), officerEmail)
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'active', 'addedBy', 'updatedAt']);
+      allow delete: if isValidEmailDocId(officerEmail)
+        && isAdmin()
+        && officerEmail.lower() != 'heinhtetoo336123@gmail.com';
+    }
+
+    // 2. Application Links (keyed by token)
+    match /application_links/{linkId} {
+      // Single-document lookup allowed by exact token so citizens can open ?applyToken=...
+      allow get: if isValidId(linkId);
+      // List queries strictly enforced per-officer or admin (prevents scraping)
+      allow list: if isApprovedOfficer() && (
+        resource.data.officerId == request.auth.uid
+        || resource.data.officerEmail.lower() == request.auth.token.email.lower()
+        || isAdmin()
+      );
+      allow create: if isValidId(linkId)
+        && isApprovedOfficer()
+        && isValidApplicationLink(incoming())
+        && incoming().token == linkId
+        && incoming().officerId == request.auth.uid
+        && incoming().officerEmail.lower() == request.auth.token.email.lower()
+        && incoming().status == 'ACTIVE'
+        && incoming().createdAt == request.time;
+      allow update: if isValidId(linkId)
+        && isApprovedOfficer()
+        && isValidApplicationLink(incoming())
+        && (isLinkOwner(existing()) || isAdmin())
+        && incoming().officerId == existing().officerId
+        && incoming().officerEmail == existing().officerEmail
+        && incoming().token == existing().token
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'customNote', 'expiresAt', 'updatedAt', 'submissionCount']);
+      allow delete: if isValidId(linkId)
+        && isApprovedOfficer()
+        && (isLinkOwner(existing()) || isAdmin());
+    }
+
+    // 3. Application Submissions (PII isolated strictly to issuing officer or admin)
+    match /application_submissions/{submissionId} {
+      allow get: if isValidId(submissionId)
+        && isApprovedOfficer()
+        && (isLinkOwner(existing()) || isAdmin());
+      allow list: if isApprovedOfficer() && (
+        resource.data.officerId == request.auth.uid
+        || resource.data.officerEmail.lower() == request.auth.token.email.lower()
+        || isAdmin()
+      );
+      // Citizens can submit ONLY against an existing ACTIVE ApplicationLink and routed strictly to that link's officer
+      allow create: if isValidId(submissionId)
+        && isValidApplicationSubmission(incoming())
+        && incoming().status == 'PENDING'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/application_links/$(incoming().linkToken))
+        && get(/databases/$(database)/documents/application_links/$(incoming().linkToken)).data.status == 'ACTIVE'
+        && incoming().officerId == get(/databases/$(database)/documents/application_links/$(incoming().linkToken)).data.officerId
+        && incoming().officerEmail == get(/databases/$(database)/documents/application_links/$(incoming().linkToken)).data.officerEmail;
+      // Officers can update review status/notes on their own assigned submissions; terminal APPROVED/REJECTED locked except for Admin
+      allow update: if isValidId(submissionId)
+        && isApprovedOfficer()
+        && isValidApplicationSubmission(incoming())
+        && (isLinkOwner(existing()) || isAdmin())
+        && (existing().status in ['PENDING', 'REVISION_NEEDED'] || isAdmin())
+        && incoming().officerId == existing().officerId
+        && incoming().officerEmail == existing().officerEmail
+        && incoming().linkToken == existing().linkToken
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'officerNotes', 'updatedAt']);
+      allow delete: if isValidId(submissionId)
+        && isApprovedOfficer()
+        && (isLinkOwner(existing()) || isAdmin());
     }
   }
 }

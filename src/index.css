@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* Official Pyidaungsu Font 2.5.3 Integration */
 @font-face {
@@ -17,33 +18,111 @@
   font-display: swap;
 }
 
+:root {
+  --ios-canvas: #F2F2F7;
+  --ios-surface: #FFFFFF;
+  --ios-surface-secondary: #F8F8FA;
+  --ios-glass: rgba(255, 255, 255, 0.78);
+  --ios-hairline: rgba(15, 23, 42, 0.09);
+  --ios-accent: #0055D4;
+  --ios-accent-deep: #0A2E6E;
+  --ios-gold: #B5891C;
+  color-scheme: light;
+}
+
+.dark {
+  --ios-canvas: #000000;
+  --ios-surface: #1C1C1E;
+  --ios-surface-secondary: #2C2C2E;
+  --ios-glass: rgba(28, 28, 30, 0.78);
+  --ios-hairline: rgba(255, 255, 255, 0.12);
+  --ios-accent: #3B82F6;
+  --ios-accent-deep: #1D4ED8;
+  --ios-gold: #EAB308;
+  color-scheme: dark;
+}
+
 @layer utilities {
   .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom, 1rem);
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+
+  .ios-liquid-glass {
+    background: var(--ios-glass);
+    backdrop-filter: blur(28px) saturate(190%);
+    -webkit-backdrop-filter: blur(28px) saturate(190%);
+    box-shadow:
+      0 10px 30px -10px rgba(15, 23, 42, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  }
+
+  .dark .ios-liquid-glass {
+    box-shadow:
+      0 14px 36px -10px rgba(0, 0, 0, 0.65),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+
+  .ios-grouped-card {
+    background-color: var(--ios-surface);
+    border: 1px solid var(--ios-hairline);
+    border-radius: 1.5rem;
+    box-shadow: 0 2px 10px -2px rgba(15, 23, 42, 0.04);
+  }
+
+  .dark .ios-grouped-card {
+    box-shadow: none;
+  }
+
+  .ios-press {
+    transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), opacity 160ms ease;
+  }
+
+  .ios-press:active {
+    transform: scale(0.98);
+  }
+
+  .tabular-nums-clean {
+    font-variant-numeric: tabular-nums;
   }
 }
 
 html, body, #root {
-  font-family: 'Pyidaungsu', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Pyidaungsu', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   width: 100%;
   max-width: 100vw;
   overflow-x: hidden;
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  background-color: var(--ios-canvas);
+  -webkit-tap-highlight-color: transparent;
 }
 
 input, textarea, select, button, label, p, span, h1, h2, h3, h4, h5, h6 {
-  font-family: 'Pyidaungsu', sans-serif !important;
+  font-family: 'Pyidaungsu', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-/* Ensure official letter print layout strictly uses Pyidaungsu font */
+.font-mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ensure official letter print layout strictly uses Pyidaungsu font on pure white */
 #print-area, .font-serif {
   font-family: 'Pyidaungsu', serif !important;
 }
 
 *, ::before, ::after {
   box-sizing: border-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Print Stylesheet for Official Letters */

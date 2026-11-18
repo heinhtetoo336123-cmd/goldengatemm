@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Scale, FolderArchive, ShieldCheck, ArrowRight, ChevronRight, QrCode } from 'lucide-react';
+import { FileText, Scale, FolderArchive, ShieldCheck, ArrowUpRight, ChevronRight, QrCode } from 'lucide-react';
 import { User, DocumentRecord } from '../types';
 import { TabType } from './BottomNav';
 
@@ -11,164 +11,168 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
+  user,
   documents,
-  onNavigate
+  onNavigate,
+  onOpenAuth
 }) => {
+  const modules: {
+    id: TabType;
+    title: string;
+    subtitle: string;
+    icon: typeof FileText;
+  }[] = [
+    {
+      id: 'letter',
+      title: 'ရုံးစာရေးသားခြင်း နှင့် Auto Format',
+      subtitle: 'အပေါ်စာ၊ ကြေးနန်းစာ၊ ရုံးတွင်းအမိန့်နှင့် ထောက်ခံစာ ပုံစံများ',
+      icon: FileText
+    },
+    {
+      id: 'legal',
+      title: 'ဥပဒေ စာအုပ်များ နှင့် PDF ရှာဖွေစနစ်',
+      subtitle: 'PDF ဥပဒေစာအုပ်များ တင်သွင်းခြင်းနှင့် ပုဒ်မရှာဖွေခြင်း',
+      icon: Scale
+    },
+    {
+      id: 'records',
+      title: 'မှတ်တမ်းများ နှင့် ဖုန်းစာအုပ်',
+      subtitle: 'ဝင်စာ/ထွက်စာ မှတ်တမ်းများနှင့် တိုင်း/ခရိုင်/မြို့နယ် ဖုန်းစာအုပ်',
+      icon: FolderArchive
+    },
+    {
+      id: 'auth',
+      title: 'အကောင့် နှင့် လုံခြုံရေး စီမံမှု',
+      subtitle: 'Verified Google Auth၊ Allowlist စီမံမှုနှင့် Theme',
+      icon: ShieldCheck
+    }
+  ];
+
   return (
-    <div className="space-y-5 pb-24 max-w-4xl mx-auto w-full max-w-full overflow-x-hidden">
-      {/* Main Core Features Menu Tiles */}
-      <div className="space-y-3">
-        <h2 className="text-xs font-black text-slate-700 uppercase tracking-widest px-1">
-          လုပ်ငန်းခွင် ပင်မ ကဏ္ဍများ (Core Features)
+    <div className="space-y-6 pb-28 max-w-5xl mx-auto w-full">
+      {/* iOS 27 Large Title Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 px-1">
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            {user ? `${user.department} · ${user.badgeNumber}` : 'လူဝင်မှုကြီးကြပ်ရေး ဦးစီးဌာန'}
+          </p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white text-balance">
+            {user ? `မင်္ဂလာပါ၊ ${user.name}` : 'Golden Gate MM'}
+          </h1>
+        </div>
+        {user && (
+          <button
+            type="button"
+            onClick={onOpenAuth}
+            className="self-start sm:self-auto min-h-[44px] px-4 py-2 rounded-2xl bg-white dark:bg-[#1C1C1E] border border-slate-900/10 dark:border-white/10 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-[#0055D4] transition ios-press whitespace-nowrap cursor-pointer"
+          >
+            {user.role} · {user.email}
+          </button>
+        )}
+      </div>
+
+      {/* Focal Anchor Card: Applying Zone */}
+      <button
+        type="button"
+        onClick={() => onNavigate('apply')}
+        className="w-full text-left p-6 sm:p-7 rounded-[28px] bg-gradient-to-br from-[#0A2E6E] via-[#0B3B8C] to-[#071F4A] text-white shadow-lg shadow-blue-950/20 border border-white/15 transition group ios-press cursor-pointer"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-white/12 backdrop-blur-md border border-white/20 flex items-center justify-center text-amber-300 shrink-0">
+            <QrCode className="w-6 h-6" />
+          </div>
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-300 whitespace-nowrap">
+            <span>ဖွင့်လှစ်မည်</span>
+            <ArrowUpRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </span>
+        </div>
+
+        <div className="mt-5 space-y-1.5">
+          <p className="text-xs font-medium text-blue-200">
+            နိုင်ငံသားစိစစ်ရေးကတ် · အိမ်ထောင်စုစာရင်း · သေဆုံး/မွေးဖွား
+          </p>
+          <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-white">
+            Applying Zone (လျှောက်လွှာတင်ခြင်း ဇုန်)
+          </h2>
+          <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed max-w-2xl">
+            ပြည်သူများထံသို့ သီးသန့် QR/Link ထုတ်ပေးခြင်းနှင့် တင်သွင်းလာသော လျှောက်လွှာများကို သက်ဆိုင်ရာ အရာရှိထံ တိုက်ရိုက် စိစစ်အတည်ပြုသည့် စနစ်
+          </p>
+        </div>
+      </button>
+
+      {/* iOS 27 Inset Grouped Modules Grid */}
+      <div className="space-y-2.5">
+        <h2 className="text-xs font-bold text-slate-500 dark:text-slate-400 px-1">
+          လုပ်ငန်းခွင် ကဏ္ဍများ
         </h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* Tile 1: Applying Zone */}
-          <div
-            onClick={() => onNavigate('apply')}
-            className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-950 to-slate-900 text-white border border-blue-900 transition cursor-pointer space-y-2 group shadow-sm hover:shadow-md col-span-1 sm:col-span-2"
-          >
-            <div className="flex items-center justify-between">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold border border-amber-400/30 group-hover:bg-amber-400 group-hover:text-blue-950 transition">
-                <QrCode className="w-5 h-5" />
-              </div>
-              <span className="text-[10px] font-black bg-amber-400 text-blue-950 px-2.5 py-1 rounded-full uppercase tracking-wider">
-                FEATURE MODULE
-              </span>
-            </div>
-            <div>
-              <h3 className="text-sm sm:text-base font-black text-white group-hover:text-amber-300 transition flex items-center gap-1.5 pt-1">
-                <span>Applying Zone (လျှောက်လွှာတင်ခြင်း ဇုန်)</span>
-                <ArrowRight className="w-4 h-4 text-amber-400" />
-              </h3>
-              <p className="text-xs text-slate-300 mt-1 leading-relaxed font-medium">
-                နိုင်ငံသားစိစစ်ရေးကတ်၊ အိမ်ထောင်စုဇယား၊ သေဆုံးသူပယ်ဖျက်နှင့် မွေးဖွားသူထည့်သွင်း လျှောက်လွှာများအတွက် သီးသန့်လင့်ခ် ထုတ်ပေးခြင်းနှင့် အရာရှိထံ ဒေတာ တိုက်ရိုက် စိစစ်စနစ်
-              </p>
-            </div>
-          </div>
-
-          {/* Tile 2: Official Letter Writer */}
-          <div
-            onClick={() => onNavigate('letter')}
-            className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 hover:border-blue-900 transition cursor-pointer space-y-2 group shadow-2xs hover:shadow-xs"
-          >
-            <div className="flex items-center justify-between">
-              <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-900 flex items-center justify-center font-bold border border-blue-200 group-hover:bg-blue-900 group-hover:text-white transition">
-                <FileText className="w-5 h-5" />
-              </div>
-              <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-900 transition" />
-            </div>
-            <div>
-              <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 group-hover:text-blue-900 transition">
-                ရုံးစာရေးသားခြင်း နှင့် Auto Format
-              </h3>
-              <p className="text-[11px] sm:text-xs text-slate-600 mt-1 leading-relaxed font-medium">
-                မြို့နယ် Section အရ ရုံးစာ (အပေါ်စာ)၊ ကြေးနန်းစာ၊ ရုံးတွင်းအမိန့်စာ၊ စိစစ်ပြန်ကြားစာ၊ ထောက်ခံစာ Preset များဖြင့် အလိုအလျောက် ပုံစံညှိခြင်း
-              </p>
-            </div>
-          </div>
-
-          {/* Tile 3: Legal Laws Search & PDF Reader */}
-          <div
-            onClick={() => onNavigate('legal')}
-            className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 hover:border-blue-900 transition cursor-pointer space-y-2 group shadow-2xs hover:shadow-xs"
-          >
-            <div className="flex items-center justify-between">
-              <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-900 flex items-center justify-center font-bold border border-blue-200 group-hover:bg-blue-900 group-hover:text-white transition">
-                <Scale className="w-5 h-5" />
-              </div>
-              <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-900 transition" />
-            </div>
-            <div>
-              <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 group-hover:text-blue-900 transition">
-                ဥပဒေ စာအုပ်များ နှင့် PDF ရှာဖွေစနစ်
-              </h3>
-              <p className="text-[11px] sm:text-xs text-slate-600 mt-1 leading-relaxed font-medium">
-                PDF ဥပဒေစာအုပ်များ တင်သွင်းခြင်း၊ ဥပဒေစာအုပ်များအလိုက် ပုဒ်မနှင့် စကားလုံးများ တိုက်ရိုက် ရှာဖွေထုတ်ယူခြင်း
-              </p>
-            </div>
-          </div>
-
-          {/* Tile 4: Document Records */}
-          <div
-            onClick={() => onNavigate('records')}
-            className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 hover:border-blue-900 transition cursor-pointer space-y-2 group shadow-2xs hover:shadow-xs"
-          >
-            <div className="flex items-center justify-between">
-              <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-900 flex items-center justify-center font-bold border border-blue-200 group-hover:bg-blue-900 group-hover:text-white transition">
-                <FolderArchive className="w-5 h-5" />
-              </div>
-              <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-900 transition" />
-            </div>
-            <div>
-              <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 group-hover:text-blue-900 transition">
-                မှတ်တမ်းများ စီမံခန့်ခွဲမှု
-              </h3>
-              <p className="text-[11px] sm:text-xs text-slate-600 mt-1 leading-relaxed font-medium">
-                ညွှန်ကြားစာများ၊ ဝင်စာ/ထွက်စာများ၊ စစ်ဆေးရေး မှတ်တမ်းများနှင့် ဗီဇာ စိစစ်ချက်များ စီမံခြင်း
-              </p>
-            </div>
-          </div>
-
-          {/* Tile 5: Access Control & Authorization */}
-          <div
-            onClick={() => onNavigate('auth')}
-            className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 hover:border-blue-900 transition cursor-pointer space-y-2 group shadow-2xs hover:shadow-xs"
-          >
-            <div className="flex items-center justify-between">
-              <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-900 flex items-center justify-center font-bold border border-blue-200 group-hover:bg-blue-900 group-hover:text-white transition">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-900 transition" />
-            </div>
-            <div>
-              <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 group-hover:text-blue-900 transition">
-                အကောင့် နှင့် လုပ်ပိုင်ခွင့် (Auth)
-              </h3>
-              <p className="text-[11px] sm:text-xs text-slate-600 mt-1 leading-relaxed font-medium">
-                Google Login စိစစ်ခြင်း၊ Pre-approved အရာရှိ စာရင်း စီမံခြင်း နှင့် Access Control
-              </p>
-            </div>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {modules.map((mod) => {
+            const Icon = mod.icon;
+            return (
+              <button
+                key={mod.id}
+                type="button"
+                onClick={() => onNavigate(mod.id)}
+                className="ios-grouped-card p-4 sm:p-5 text-left flex items-center gap-4 hover:border-[#0055D4]/50 dark:hover:border-blue-500/50 transition ios-press group cursor-pointer"
+              >
+                <div className="w-11 h-11 rounded-2xl bg-[#0055D4]/10 dark:bg-blue-500/15 text-[#0055D4] dark:text-blue-400 flex items-center justify-center shrink-0 group-hover:bg-[#0055D4] group-hover:text-white transition-colors">
+                  <Icon className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0 space-y-0.5">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                    {mod.title}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
+                    {mod.subtitle}
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#0055D4] shrink-0 transition-colors" />
+              </button>
+            );
+          })}
         </div>
       </div>
 
-
-      {/* Recent Document Records Summary List */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 space-y-3 shadow-2xs">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-          <h3 className="text-xs font-extrabold text-slate-900">
-            နောက်ဆုံး ပြုပြင်ထားသော မှတ်တမ်းများ
-          </h3>
+      {/* iOS Inset Grouped Recent Records Section */}
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between px-1">
+          <h2 className="text-xs font-bold text-slate-500 dark:text-slate-400">
+            နောက်ဆုံး မှတ်တမ်းများ
+          </h2>
           <button
+            type="button"
             onClick={() => onNavigate('records')}
-            className="text-[11px] font-bold text-blue-900 hover:underline flex items-center gap-1"
+            className="min-h-[40px] px-2 text-xs font-semibold text-[#0055D4] dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
           >
             <span>အားလုံး ကြည့်မည်</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <div className="space-y-2">
+        <div className="ios-grouped-card overflow-hidden divide-y divide-slate-200/70 dark:divide-white/10">
           {documents.length === 0 ? (
-            <p className="text-xs text-slate-500 py-3 text-center font-medium">
+            <p className="text-xs text-slate-500 dark:text-slate-400 py-8 px-4 text-center">
               လက်ရှိ သိမ်းဆည်းထားသော မှတ်တမ်း မရှိသေးပါ။ ရုံးစာရေးသားခြင်း သို့မဟုတ် မှတ်တမ်းများ ကဏ္ဍတွင် ထည့်သွင်းနိုင်ပါသည်။
             </p>
           ) : (
-            documents.slice(0, 3).map((doc) => (
-              <div
+            documents.slice(0, 4).map((doc) => (
+              <button
                 key={doc.id}
+                type="button"
                 onClick={() => onNavigate('records')}
-                className="p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-900 transition cursor-pointer flex items-center justify-between text-xs"
+                className="w-full px-4 sm:px-5 py-3.5 text-left hover:bg-slate-50 dark:hover:bg-white/5 transition flex items-center justify-between gap-3 cursor-pointer"
               >
-                <div className="space-y-0.5 truncate pr-2">
-                  <span className="font-extrabold text-slate-900 truncate block">{doc.title}</span>
-                  <span className="text-[10px] text-slate-600 font-mono block">{doc.refNumber} · {doc.date}</span>
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
+                    {doc.title}
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums truncate">
+                    {doc.refNumber} · {doc.date} · {doc.category}
+                  </p>
                 </div>
-                <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-950 font-extrabold text-[10px] shrink-0 border border-blue-200">
-                  {doc.category}
-                </span>
-              </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+              </button>
             ))
           )}
         </div>

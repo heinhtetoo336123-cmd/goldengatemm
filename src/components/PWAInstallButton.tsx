@@ -13,11 +13,12 @@ export const PWAInstallButton: React.FC<{ className?: string }> = ({ className =
   if (isInstallable) {
     return (
       <button
+        type="button"
         onClick={install}
-        className={`flex items-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold px-3 py-1.5 text-xs shadow-md transition active:scale-95 whitespace-nowrap shrink-0 ${className}`}
+        className={`min-h-[36px] flex items-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 text-xs transition ios-press whitespace-nowrap shrink-0 ${className}`}
       >
-        <Download className="w-3.5 h-3.5" />
-        <span>PWA ထည့်သွင်းရန်</span>
+        <Download className="w-3.5 h-3.5 shrink-0" />
+        <span>PWA ထည့်သွင်း</span>
       </button>
     );
   }
@@ -26,46 +27,54 @@ export const PWAInstallButton: React.FC<{ className?: string }> = ({ className =
     return (
       <>
         <button
+          type="button"
           onClick={() => setShowIOSGuide(true)}
-          className={`flex items-center gap-1.5 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 text-amber-300 font-medium px-2.5 py-1.5 text-xs transition whitespace-nowrap shrink-0 ${className}`}
+          className={`min-h-[36px] flex items-center gap-1.5 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-800 dark:text-amber-300 font-semibold px-2.5 py-1.5 text-xs transition whitespace-nowrap shrink-0 ios-press ${className}`}
         >
-          <Smartphone className="w-3.5 h-3.5" />
+          <Smartphone className="w-3.5 h-3.5 shrink-0" />
           <span>iOS PWA</span>
         </button>
 
         {showIOSGuide && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="w-full max-w-sm rounded-2xl bg-slate-900 border border-slate-800 p-5 shadow-2xl text-slate-100 relative">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-md animate-in fade-in">
+            <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-6 shadow-2xl text-slate-900 dark:text-zinc-100 relative">
               <button
+                type="button"
                 onClick={() => setShowIOSGuide(false)}
-                className="absolute top-4 right-4 text-slate-400 hover:text-white p-1"
+                className="absolute top-4 right-4 w-9 h-9 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center transition"
+                aria-label="ပိတ်မည်"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+              <div className="flex items-center gap-3 mb-4 pr-8">
+                <div className="w-11 h-11 rounded-2xl bg-amber-100 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 flex items-center justify-center text-amber-700 dark:text-amber-400 shrink-0">
                   <Smartphone className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">iPhone/iPad တွင် ထည့်သွင်းရန်</h3>
-                  <p className="text-xs text-slate-400">Golden Gate MM PWA App</p>
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">iPhone/iPad တွင် ထည့်သွင်းရန်</h3>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 font-medium">Golden Gate MM PWA</p>
                 </div>
               </div>
 
-              <div className="space-y-3 my-4 text-xs text-slate-300">
-                <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50">
-                  <div className="p-1.5 bg-amber-500/20 rounded-lg text-amber-400 font-bold shrink-0">၁</div>
-                  <p className="mt-0.5">Safari ဘရောက်ဇာအောက်ခြေရှိ <Share2 className="w-3.5 h-3.5 inline text-amber-400 mx-1" /> <strong>Share (မျှဝေရန်)</strong> ခလုတ်ကို နှိပ်ပါ။</p>
+              <div className="space-y-2.5 my-4 text-xs text-slate-700 dark:text-zinc-300">
+                <div className="flex items-start gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-zinc-800/70 border border-slate-200/70 dark:border-zinc-800">
+                  <span className="w-6 h-6 rounded-lg bg-blue-100 dark:bg-blue-500/20 text-blue-800 dark:text-blue-300 font-extrabold flex items-center justify-center shrink-0">၁</span>
+                  <p className="leading-relaxed">
+                    Safari အောက်ခြေရှိ <Share2 className="w-3.5 h-3.5 inline text-blue-600 dark:text-blue-400 mx-0.5" /> <strong>Share</strong> ခလုတ်ကို နှိပ်ပါ။
+                  </p>
                 </div>
-                <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50">
-                  <div className="p-1.5 bg-amber-500/20 rounded-lg text-amber-400 font-bold shrink-0">၂</div>
-                  <p className="mt-0.5">အောက်သို့ဆွဲ၍ <strong>"Add to Home Screen" (ပင်မစာမျက်နှာသို့ ထည့်ရန်)</strong> ကို ရွေးချယ်ပါ။</p>
+                <div className="flex items-start gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-zinc-800/70 border border-slate-200/70 dark:border-zinc-800">
+                  <span className="w-6 h-6 rounded-lg bg-blue-100 dark:bg-blue-500/20 text-blue-800 dark:text-blue-300 font-extrabold flex items-center justify-center shrink-0">၂</span>
+                  <p className="leading-relaxed">
+                    <strong>"Add to Home Screen"</strong> ကို ရွေးချယ်ပါ။
+                  </p>
                 </div>
               </div>
 
               <button
+                type="button"
                 onClick={() => setShowIOSGuide(false)}
-                className="w-full py-2.5 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs hover:bg-amber-400 transition"
+                className="w-full min-h-[44px] py-2.5 rounded-2xl bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs transition ios-press"
               >
                 နားလည်ပါပြီ
               </button>

@@ -1,4 +1,32 @@
-import { DocumentRecord, User, LetterPreset, UserLocationConfig, OfficialLetterInput, TelegramInput, RegisteredOfficer, MasterLetterData, ApplicationLink, ApplicationSubmission, ApplicationSubmissionStatus, ApplicationType } from '../types';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  serverTimestamp,
+  Timestamp
+} from 'firebase/firestore';
+import { DocumentRecord, User, UserRole, LetterPreset, UserLocationConfig, OfficialLetterInput, TelegramInput, RegisteredOfficer, MasterLetterData, ApplicationLink, ApplicationSubmission, ApplicationSubmissionStatus } from '../types';
+import { firestore, auth, isFirebaseConfigured, OperationType, handleFirestoreError } from './firebase';
+
+const BOOTSTRAP_ADMIN_EMAIL = 'heinhtetoo336123@gmail.com';
+
+const clampStr = (val: string | undefined, max: number): string => (val || '').trim().slice(0, max);
+
+const toIsoString = (val: unknown): string => {
+  if (!val) return new Date().toISOString();
+  if (typeof val === 'string') return val;
+  if (val instanceof Timestamp) return val.toDate().toISOString();
+  if (typeof val === 'object' && val !== null && 'toDate' in val && typeof (val as { toDate: () => Date }).toDate === 'function') {
+    return (val as { toDate: () => Date }).toDate().toISOString();
+  }
+  return new Date().toISOString();
+};
 
 const STORAGE_KEYS = {
   PRE_APPROVED_EMAILS: 'ggmm_pre_approved_emails_v1',
@@ -174,6 +202,26 @@ const INITIAL_DOCUMENTS: DocumentRecord[] = [];
 const DEFAULT_OFFICERS: RegisteredOfficer[] = [];
 
 export const db = {
+  getTheme(): 'light' | 'dark' {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.THEME);
+      return stored === 'dark' ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
+  },
+
+  setTheme(theme: 'light' | 'dark'): void {
+    try {
+      localStorage.setItem(STORAGE_KEYS.THEME, theme);
+    } catch {
+      // Ignore storage errors
+    }
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+    }
+  },
+
   getPreApprovedEmails(): string[] {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.PRE_APPROVED_EMAILS);
@@ -181,7 +229,11 @@ export const db = {
         localStorage.setItem(STORAGE_KEYS.PRE_APPROVED_EMAILS, JSON.stringify(DEFAULT_PRE_APPROVED));
         return DEFAULT_PRE_APPROVED;
       }
-      return JSON.parse(stored);
+      const parsed: string[] = JSON.parse(stored);
+      if (!parsed.map(e => e.toLowerCase()).includes(BOOTSTRAP_ADMIN_EMAIL)) {
+        parsed.unshift(BOOTSTRAP_ADMIN_EMAIL);
+      }
+      return parsed;
     } catch {
       return DEFAULT_PRE_APPROVED;
     }
@@ -189,8 +241,9 @@ export const db = {
 
   isEmailPreApproved(email: string): boolean {
     if (!email) return false;
-    const list = this.getPreApprovedEmails();
     const clean = email.trim().toLowerCase();
+    if (clean === BOOTSTRAP_ADMIN_EMAIL) return true;
+    const list = this.getPreApprovedEmails();
     return list.some(item => item.trim().toLowerCase() === clean);
   },
 
@@ -206,8 +259,108 @@ export const db = {
   },
 
   removePreApprovedEmail(email: string): void {
-    const list = this.getPreApprovedEmails().filter(e => e.toLowerCase() !== email.toLowerCase());
+    const clean = email.trim().toLowerCase();
+    if (clean === BOOTSTRAP_ADMIN_EMAIL) return;
+    const list = this.getPreApprovedEmails().filter(e => e.toLowerCase() !== clean);
     localStorage.setItem(STORAGE_KEYS.PRE_APPROVED_EMAILS, JSON.stringify(list));
+  },
+
+  async checkOfficerAuthorizedAsync(email: string): Promise<{ authorized: boolean; role: UserRole }> {
+    const clean = email.trim().toLowerCase();
+    if (clean === BOOTSTRAP_ADMIN_EMAIL) {
+      return { authorized: true, role: 'ADMIN' };
+    }
+    if (isFirebaseConfigured && firestore) {
+      try {
+        const snap = await getDoc(doc(firestore, 'authorized_officers', clean));
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.active === true) {
+            const role = (data.role as UserRole) || 'OFFICER';
+            this.addPreApprovedEmail(clean);
+            return { authorized: true, role };
+          }
+          return { authorized: false, role: 'OFFICER' };
+        }
+        return { authorized: false, role: 'OFFICER' };
+      } catch {
+        // Offline / rule check fallback to local allowlist
+      }
+    }
+    return {
+      authorized: this.isEmailPreApproved(clean),
+      role: 'OFFICER'
+    };
+  },
+
+  async fetchAuthorizedEmailsAsync(): Promise<string[]> {
+    const localList = this.getPreApprovedEmails();
+    if (!isFirebaseConfigured || !firestore || !auth?.currentUser) return localList;
+    try {
+      const snap = await getDocs(collection(firestore, 'authorized_officers'));
+      const remoteEmails = snap.docs
+        .filter(d => d.data().active === true)
+        .map(d => (d.data().email as string || d.id).toLowerCase());
+      const merged = Array.from(new Set([BOOTSTRAP_ADMIN_EMAIL, ...remoteEmails, ...localList]));
+      localStorage.setItem(STORAGE_KEYS.PRE_APPROVED_EMAILS, JSON.stringify(merged));
+      return merged;
+    } catch {
+      return localList;
+    }
+  },
+
+  async addAuthorizedEmailAsync(email: string, role: UserRole = 'OFFICER'): Promise<boolean> {
+    const clean = clampStr(email.toLowerCase(), 180);
+    if (!clean || !clean.includes('@')) return false;
+    this.addPreApprovedEmail(clean);
+    if (isFirebaseConfigured && firestore && auth?.currentUser) {
+      const path = `authorized_officers/${clean}`;
+      const docRef = doc(firestore, 'authorized_officers', clean);
+      try {
+        const existingSnap = await getDoc(docRef);
+        const addedBy = clampStr(auth.currentUser.email || BOOTSTRAP_ADMIN_EMAIL, 180);
+        if (existingSnap.exists()) {
+          await updateDoc(docRef, {
+            role,
+            active: true,
+            addedBy,
+            updatedAt: serverTimestamp()
+          });
+        } else {
+          await setDoc(docRef, {
+            email: clean,
+            role,
+            active: true,
+            addedBy,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('Missing or insufficient permissions')) {
+          handleFirestoreError(err, OperationType.WRITE, path);
+        }
+        throw err;
+      }
+    }
+    return true;
+  },
+
+  async removeAuthorizedEmailAsync(email: string): Promise<void> {
+    const clean = email.trim().toLowerCase();
+    if (clean === BOOTSTRAP_ADMIN_EMAIL) return;
+    this.removePreApprovedEmail(clean);
+    if (isFirebaseConfigured && firestore && auth?.currentUser) {
+      const path = `authorized_officers/${clean}`;
+      try {
+        await deleteDoc(doc(firestore, 'authorized_officers', clean));
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('Missing or insufficient permissions')) {
+          handleFirestoreError(err, OperationType.DELETE, path);
+        }
+        throw err;
+      }
+    }
   },
 
   getCurrentUser(): User | null {
@@ -780,12 +933,17 @@ export const db = {
   },
 
   // Applying Zone: Application Links Management
-  getApplicationLinks(officerId?: string): ApplicationLink[] {
+  getApplicationLinks(officerId?: string, officerEmail?: string): ApplicationLink[] {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.APPLICATION_LINKS);
       const links: ApplicationLink[] = stored ? JSON.parse(stored) : [];
       if (!officerId || officerId === 'ALL') return links;
-      return links.filter(l => l.officerId === officerId || l.officerBadge === officerId);
+      const cleanEmail = officerEmail?.toLowerCase();
+      return links.filter(l =>
+        l.officerId === officerId ||
+        l.officerBadge === officerId ||
+        (cleanEmail && l.officerEmail?.toLowerCase() === cleanEmail)
+      );
     } catch {
       return [];
     }
@@ -805,19 +963,20 @@ export const db = {
       }
     }
 
-    const token = link.token || `APP-${new Date().getFullYear()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+    const token = clampStr(link.token || `APP-${new Date().getFullYear()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`, 64);
     const newLink: ApplicationLink = {
-      id: link.id || `link-${Date.now()}`,
+      id: clampStr(link.id || token, 128),
       token,
-      officerId: link.officerId || 'usr-101',
-      officerName: link.officerName || 'Hein Htet Oo',
-      officerBadge: link.officerBadge || 'IMM-2026',
-      officerStation: link.officerStation || 'ရန်ကုန် အပြည်ပြည်ဆိုင်ရာ လေဆိပ်ဂိတ်',
+      officerId: clampStr(link.officerId || auth?.currentUser?.uid || '', 128),
+      officerEmail: clampStr(link.officerEmail || auth?.currentUser?.email || '', 180).toLowerCase(),
+      officerName: clampStr(link.officerName || 'Officer', 120),
+      officerBadge: clampStr(link.officerBadge || 'IMM-2026', 64),
+      officerStation: clampStr(link.officerStation || 'မြို့နယ်ဦးစီးမှူးရုံး', 200),
       applicationType: link.applicationType || 'NRC_APP',
-      townshipName: link.townshipName || 'မင်္ဂလာဒုံမြို့နယ်',
-      customNote: link.customNote || '',
+      townshipName: clampStr(link.townshipName || 'မင်္ဂလာဒုံမြို့နယ်', 160),
+      customNote: clampStr(link.customNote || '', 500),
       createdAt: now,
-      expiresAt: link.expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      expiresAt: clampStr(link.expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), 64),
       status: 'ACTIVE',
       submissionCount: 0
     };
@@ -827,32 +986,169 @@ export const db = {
     return newLink;
   },
 
+  async saveApplicationLinkAsync(link: Partial<ApplicationLink>): Promise<ApplicationLink> {
+    const resolvedOfficerId = auth?.currentUser?.uid || link.officerId || '';
+    const resolvedOfficerEmail = (auth?.currentUser?.email || link.officerEmail || '').toLowerCase();
+
+    const saved = this.saveApplicationLink({
+      ...link,
+      officerId: resolvedOfficerId,
+      officerEmail: resolvedOfficerEmail
+    });
+
+    if (isFirebaseConfigured && firestore && auth?.currentUser) {
+      const path = `application_links/${saved.token}`;
+      try {
+        await setDoc(doc(firestore, 'application_links', saved.token), {
+          id: saved.token,
+          token: saved.token,
+          officerId: auth.currentUser.uid,
+          officerEmail: (auth.currentUser.email || saved.officerEmail || '').toLowerCase(),
+          officerName: clampStr(saved.officerName, 120),
+          officerBadge: clampStr(saved.officerBadge, 64),
+          officerStation: clampStr(saved.officerStation, 200),
+          applicationType: saved.applicationType,
+          townshipName: clampStr(saved.townshipName, 160),
+          customNote: clampStr(saved.customNote, 500),
+          status: 'ACTIVE',
+          expiresAt: saved.expiresAt,
+          submissionCount: 0,
+          createdAt: serverTimestamp()
+        });
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('Missing or insufficient permissions')) {
+          handleFirestoreError(err, OperationType.CREATE, path);
+        }
+        if (navigator.onLine) {
+          throw err;
+        }
+      }
+    }
+    return saved;
+  },
+
+  async fetchApplicationLinksAsync(officerId: string, officerEmail?: string, isAdminUser = false): Promise<ApplicationLink[]> {
+    const localLinks = this.getApplicationLinks(isAdminUser ? 'ALL' : officerId, officerEmail);
+    if (!isFirebaseConfigured || !firestore || !auth?.currentUser) return localLinks;
+    try {
+      const linksRef = collection(firestore, 'application_links');
+      const q = isAdminUser
+        ? query(linksRef)
+        : query(linksRef, where('officerId', '==', auth.currentUser.uid));
+      const snap = await getDocs(q);
+      const remoteLinks: ApplicationLink[] = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: String(data.id || d.id),
+          token: String(data.token || d.id),
+          officerId: String(data.officerId || ''),
+          officerEmail: data.officerEmail ? String(data.officerEmail) : undefined,
+          officerName: String(data.officerName || ''),
+          officerBadge: String(data.officerBadge || ''),
+          officerStation: String(data.officerStation || ''),
+          applicationType: data.applicationType,
+          townshipName: String(data.townshipName || ''),
+          customNote: data.customNote ? String(data.customNote) : '',
+          createdAt: toIsoString(data.createdAt),
+          expiresAt: String(data.expiresAt || ''),
+          status: data.status || 'ACTIVE',
+          submissionCount: Number(data.submissionCount || 0)
+        };
+      });
+      const byToken = new Map<string, ApplicationLink>();
+      localLinks.forEach((l) => byToken.set(l.token, l));
+      remoteLinks.forEach((l) => byToken.set(l.token, l));
+      return Array.from(byToken.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    } catch {
+      return localLinks;
+    }
+  },
+
   getApplicationLinkByToken(token: string): ApplicationLink | null {
     if (!token) return null;
     const links = this.getApplicationLinks();
     return links.find(l => l.token.toUpperCase() === token.toUpperCase().trim()) || null;
   },
 
+  async fetchApplicationLinkByTokenAsync(token: string): Promise<ApplicationLink | null> {
+    const cleanToken = token.trim().toUpperCase();
+    if (!cleanToken) return null;
+    const local = this.getApplicationLinkByToken(cleanToken);
+    if (isFirebaseConfigured && firestore) {
+      try {
+        const snap = await getDoc(doc(firestore, 'application_links', cleanToken));
+        if (snap.exists()) {
+          const data = snap.data();
+          return {
+            id: String(data.id || snap.id),
+            token: String(data.token || snap.id),
+            officerId: String(data.officerId || ''),
+            officerEmail: data.officerEmail ? String(data.officerEmail) : undefined,
+            officerName: String(data.officerName || ''),
+            officerBadge: String(data.officerBadge || ''),
+            officerStation: String(data.officerStation || ''),
+            applicationType: data.applicationType,
+            townshipName: String(data.townshipName || ''),
+            customNote: data.customNote ? String(data.customNote) : '',
+            createdAt: toIsoString(data.createdAt),
+            expiresAt: String(data.expiresAt || ''),
+            status: data.status || 'ACTIVE',
+            submissionCount: Number(data.submissionCount || 0)
+          };
+        }
+        if (navigator.onLine) {
+          return null;
+        }
+      } catch {
+        // Fallback to local cache when offline
+      }
+    }
+    return local;
+  },
+
   revokeApplicationLink(id: string): void {
     const links = this.getApplicationLinks();
-    const idx = links.findIndex(l => l.id === id);
+    const idx = links.findIndex(l => l.id === id || l.token === id);
     if (idx !== -1) {
       links[idx].status = 'REVOKED';
       localStorage.setItem(STORAGE_KEYS.APPLICATION_LINKS, JSON.stringify(links));
     }
   },
 
+  async revokeApplicationLinkAsync(tokenOrId: string): Promise<void> {
+    this.revokeApplicationLink(tokenOrId);
+    if (isFirebaseConfigured && firestore && auth?.currentUser) {
+      const path = `application_links/${tokenOrId}`;
+      try {
+        await updateDoc(doc(firestore, 'application_links', tokenOrId), {
+          status: 'REVOKED',
+          updatedAt: serverTimestamp()
+        });
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('Missing or insufficient permissions')) {
+          handleFirestoreError(err, OperationType.UPDATE, path);
+        }
+        if (navigator.onLine) {
+          throw err;
+        }
+      }
+    }
+  },
+
   // Applying Zone: Submissions Management
-  getApplicationSubmissions(filters?: { officerId?: string; linkToken?: string; status?: string; search?: string }): ApplicationSubmission[] {
+  getApplicationSubmissions(filters?: { officerId?: string; officerEmail?: string; linkToken?: string; status?: string; search?: string }): ApplicationSubmission[] {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.APPLICATION_SUBMISSIONS);
-      let submissions: ApplicationSubmission[] = stored ? JSON.parse(stored) : [];
+      const submissions: ApplicationSubmission[] = stored ? JSON.parse(stored) : [];
 
       if (!filters) return submissions;
 
       return submissions.filter(s => {
-        if (filters.officerId && filters.officerId !== 'ALL' && s.officerId !== filters.officerId && s.officerEmail !== filters.officerId) {
-          return false;
+        if (filters.officerId && filters.officerId !== 'ALL') {
+          const emailMatch = filters.officerEmail && s.officerEmail?.toLowerCase() === filters.officerEmail.toLowerCase();
+          if (s.officerId !== filters.officerId && s.officerEmail !== filters.officerId && !emailMatch) {
+            return false;
+          }
         }
         if (filters.linkToken && s.linkToken !== filters.linkToken) {
           return false;
@@ -890,33 +1186,35 @@ export const db = {
     }
 
     const refNo = `REF-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+    const randomSuffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+    const newId = clampStr(sub.id || `sub-${Date.now()}-${randomSuffix}`, 128);
     const newSubmission: ApplicationSubmission = {
-      id: sub.id || `sub-${Date.now()}`,
+      id: newId,
       submissionRef: refNo,
-      linkToken: sub.linkToken || 'DIRECT-GENERIC',
-      officerId: sub.officerId || 'usr-101',
-      officerEmail: sub.officerEmail || 'heinhtetoo336123@gmail.com',
+      linkToken: clampStr(sub.linkToken || '', 64),
+      officerId: clampStr(sub.officerId || '', 128),
+      officerEmail: clampStr(sub.officerEmail || '', 180).toLowerCase(),
       applicationType: sub.applicationType || 'NRC_APP',
-      applicantName: sub.applicantName?.trim() || 'လျှောက်ထားသူ',
-      applicantPhone: sub.applicantPhone?.trim() || '',
-      applicantNrc: sub.applicantNrc?.trim() || '',
-      applicantAddress: sub.applicantAddress?.trim() || '',
-      fatherName: sub.fatherName?.trim() || '',
-      motherName: sub.motherName?.trim() || '',
-      dob: sub.dob || '',
+      applicantName: clampStr(sub.applicantName || 'လျှောက်ထားသူ', 160),
+      applicantPhone: clampStr(sub.applicantPhone || '', 40),
+      applicantNrc: clampStr(sub.applicantNrc || '', 80),
+      applicantAddress: clampStr(sub.applicantAddress || '', 400),
+      fatherName: clampStr(sub.fatherName || '', 160),
+      motherName: clampStr(sub.motherName || '', 160),
+      dob: clampStr(sub.dob || '', 40),
       gender: sub.gender || 'MALE',
-      bloodGroup: sub.bloodGroup || '',
-      ethnicityReligion: sub.ethnicityReligion || '',
+      bloodGroup: clampStr(sub.bloodGroup || '', 16),
+      ethnicityReligion: clampStr(sub.ethnicityReligion || '', 120),
       nrcSubCategory: sub.nrcSubCategory || 'NEW',
-      householdListNo: sub.householdListNo || '',
-      deceasedPersonName: sub.deceasedPersonName || '',
-      dateOfDeath: sub.dateOfDeath || '',
-      causeOfDeath: sub.causeOfDeath || '',
-      childName: sub.childName || '',
-      childDob: sub.childDob || '',
+      householdListNo: clampStr(sub.householdListNo || '', 80),
+      deceasedPersonName: clampStr(sub.deceasedPersonName || '', 160),
+      dateOfDeath: clampStr(sub.dateOfDeath || '', 40),
+      causeOfDeath: clampStr(sub.causeOfDeath || '', 240),
+      childName: clampStr(sub.childName || '', 160),
+      childDob: clampStr(sub.childDob || '', 40),
       childGender: sub.childGender || 'MALE',
-      placeOfBirth: sub.placeOfBirth || '',
-      attachments: sub.attachments || [],
+      placeOfBirth: clampStr(sub.placeOfBirth || '', 200),
+      attachments: (sub.attachments || []).slice(0, 6),
       status: 'PENDING',
       createdAt: now,
       updatedAt: now
@@ -925,7 +1223,6 @@ export const db = {
     submissions.unshift(newSubmission);
     localStorage.setItem(STORAGE_KEYS.APPLICATION_SUBMISSIONS, JSON.stringify(submissions));
 
-    // Increment count on matching link
     if (sub.linkToken) {
       const links = this.getApplicationLinks();
       const linkIdx = links.findIndex(l => l.token === sub.linkToken);
@@ -938,16 +1235,118 @@ export const db = {
     return newSubmission;
   },
 
+  async submitApplicationAsync(sub: Partial<ApplicationSubmission>): Promise<ApplicationSubmission> {
+    const saved = this.saveApplicationSubmission(sub);
+    if (isFirebaseConfigured && firestore) {
+      const path = `application_submissions/${saved.id}`;
+      try {
+        await setDoc(doc(firestore, 'application_submissions', saved.id), {
+          id: saved.id,
+          submissionRef: saved.submissionRef,
+          linkToken: saved.linkToken,
+          officerId: saved.officerId,
+          officerEmail: saved.officerEmail,
+          applicationType: saved.applicationType,
+          applicantName: saved.applicantName,
+          applicantPhone: saved.applicantPhone,
+          applicantNrc: saved.applicantNrc,
+          applicantAddress: saved.applicantAddress,
+          fatherName: saved.fatherName,
+          motherName: saved.motherName,
+          dob: saved.dob,
+          gender: saved.gender,
+          bloodGroup: saved.bloodGroup || '',
+          ethnicityReligion: saved.ethnicityReligion || '',
+          nrcSubCategory: saved.nrcSubCategory || 'NEW',
+          householdListNo: saved.householdListNo || '',
+          deceasedPersonName: saved.deceasedPersonName || '',
+          dateOfDeath: saved.dateOfDeath || '',
+          causeOfDeath: saved.causeOfDeath || '',
+          childName: saved.childName || '',
+          childDob: saved.childDob || '',
+          childGender: saved.childGender || 'MALE',
+          placeOfBirth: saved.placeOfBirth || '',
+          attachments: (saved.attachments || []).slice(0, 6),
+          status: 'PENDING',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      } catch (err) {
+        if (navigator.onLine) {
+          // Roll back optimistic local cache if online write failed
+          const remaining = this.getApplicationSubmissions().filter(s => s.id !== saved.id);
+          localStorage.setItem(STORAGE_KEYS.APPLICATION_SUBMISSIONS, JSON.stringify(remaining));
+          if (err instanceof Error && err.message.includes('Missing or insufficient permissions')) {
+            handleFirestoreError(err, OperationType.CREATE, path);
+          }
+          throw err;
+        }
+      }
+    }
+    return saved;
+  },
+
+  async fetchApplicationSubmissionsAsync(officerId: string, officerEmail?: string, isAdminUser = false): Promise<ApplicationSubmission[]> {
+    const localSubs = this.getApplicationSubmissions({
+      officerId: isAdminUser ? 'ALL' : officerId,
+      officerEmail
+    });
+    if (!isFirebaseConfigured || !firestore || !auth?.currentUser) return localSubs;
+    try {
+      const subsRef = collection(firestore, 'application_submissions');
+      const q = isAdminUser
+        ? query(subsRef)
+        : query(subsRef, where('officerId', '==', auth.currentUser.uid));
+      const snap = await getDocs(q);
+      const remoteSubs: ApplicationSubmission[] = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          ...(data as Omit<ApplicationSubmission, 'createdAt' | 'updatedAt'>),
+          id: String(data.id || d.id),
+          createdAt: toIsoString(data.createdAt),
+          updatedAt: toIsoString(data.updatedAt)
+        };
+      });
+      const byId = new Map<string, ApplicationSubmission>();
+      localSubs.forEach((s) => byId.set(s.id, s));
+      remoteSubs.forEach((s) => byId.set(s.id, s));
+      return Array.from(byId.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    } catch {
+      return localSubs;
+    }
+  },
+
   updateSubmissionStatus(id: string, status: ApplicationSubmissionStatus, officerNotes?: string): void {
     const submissions = this.getApplicationSubmissions();
     const idx = submissions.findIndex(s => s.id === id);
     if (idx !== -1) {
       submissions[idx].status = status;
       if (officerNotes !== undefined) {
-        submissions[idx].officerNotes = officerNotes;
+        submissions[idx].officerNotes = clampStr(officerNotes, 1000);
       }
       submissions[idx].updatedAt = new Date().toISOString();
       localStorage.setItem(STORAGE_KEYS.APPLICATION_SUBMISSIONS, JSON.stringify(submissions));
+    }
+  },
+
+  async updateSubmissionStatusAsync(id: string, status: ApplicationSubmissionStatus, officerNotes?: string): Promise<void> {
+    this.updateSubmissionStatus(id, status, officerNotes);
+    if (isFirebaseConfigured && firestore && auth?.currentUser) {
+      const path = `application_submissions/${id}`;
+      try {
+        await updateDoc(doc(firestore, 'application_submissions', id), {
+          status,
+          officerNotes: clampStr(officerNotes, 1000),
+          updatedAt: serverTimestamp()
+        });
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('Missing or insufficient permissions')) {
+          handleFirestoreError(err, OperationType.UPDATE, path);
+        }
+        if (navigator.onLine) {
+          throw err;
+        }
+      }
     }
   }
 };

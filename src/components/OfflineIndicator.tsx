@@ -1,5 +1,5 @@
 import React from 'react';
-import { WifiOff, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { WifiOff, CheckCircle2 } from 'lucide-react';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { db } from '../services/db';
 
@@ -20,9 +20,9 @@ export const OfflineIndicator: React.FC = () => {
 
   if (syncedCount !== null) {
     return (
-      <div className="fixed bottom-20 left-4 right-4 sm:left-auto sm:right-4 sm:w-80 z-50 flex items-center gap-2.5 rounded-xl bg-blue-900 border border-blue-700 text-white px-4 py-3 text-xs font-bold shadow-2xl backdrop-blur-md animate-in slide-in-from-bottom-4">
-        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-        <span className="flex-1">အင်တာနက် ပြန်လည်ချိတ်ဆက်ပြီး offline မှတ်တမ်း ({syncedCount}) ခု အလိုအလျောက် Sync လုပ်ပြီးပါပြီ။</span>
+      <div className="fixed bottom-24 md:bottom-6 left-4 right-4 sm:left-auto sm:right-6 sm:w-80 z-50 flex items-center gap-2.5 rounded-2xl ios-liquid-glass border border-emerald-500/30 text-slate-900 dark:text-white px-4 py-3 text-xs font-semibold no-print">
+        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+        <span className="flex-1">အင်တာနက် ပြန်လည်ချိတ်ဆက်ပြီး offline မှတ်တမ်း ({syncedCount}) ခု Sync လုပ်ပြီးပါပြီ။</span>
       </div>
     );
   }
@@ -30,11 +30,13 @@ export const OfflineIndicator: React.FC = () => {
   if (isOnline) return null;
 
   return (
-    <div className="fixed bottom-20 left-4 right-4 sm:left-auto sm:right-4 sm:w-80 z-50 flex items-center gap-3 rounded-xl bg-slate-900 border border-slate-700 text-white px-4 py-3 text-xs font-bold shadow-2xl backdrop-blur-md animate-pulse">
-      <WifiOff className="w-4 h-4 text-blue-300 shrink-0" />
+    <div className="fixed bottom-24 md:bottom-6 left-4 right-4 sm:left-auto sm:right-6 sm:w-80 z-50 flex items-center gap-3 rounded-2xl ios-liquid-glass border border-amber-500/30 text-slate-900 dark:text-white px-4 py-3 text-xs no-print">
+      <WifiOff className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
       <div className="flex-1">
-        <p className="font-extrabold text-white">Offline Mode (လိုင်းမရှိပါ)</p>
-        <p className="text-[11px] text-slate-300 mt-0.5 font-medium">အချက်အလက်များကို စက်ထဲတွင် သိမ်းဆည်းထားပြီး လိုင်းရပါက Auto Sync လုပ်ပါမည်။</p>
+        <p className="font-bold">Offline Mode (လိုင်းမရှိပါ)</p>
+        <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
+          အချက်အလက်များကို စက်ထဲတွင် သိမ်းဆည်းထားပြီး လိုင်းရပါက Sync လုပ်ပါမည်။
+        </p>
       </div>
     </div>
   );

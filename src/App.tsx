@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { ShieldCheck } from 'lucide-react';
 import { Header } from './components/Header';
 import { BottomNav, TabType } from './components/BottomNav';
 import { Dashboard } from './components/Dashboard';
@@ -12,68 +14,113 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { GoogleOAuthGuideModal } from './components/GoogleOAuthGuideModal';
 import { User, DocumentRecord } from './types';
 import { db } from './services/db';
+import { auth, isFirebaseConfigured, testFirestoreConnection } from './services/firebase';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState<boolean>(false);
+  const [unauthorizedGateEmail, setUnauthorizedGateEmail] = useState<string | null>(null);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [showOAuthGuide, setShowOAuthGuide] = useState(false);
   const [applyTokenParam, setApplyTokenParam] = useState<string | null>(null);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => db.getTheme());
 
-  // Initialize data and check URL query params on mount
+  // Sync theme to document root
   useEffect(() => {
-    // Check if opening via public application token link e.g. ?applyToken=APP-2026-X89K2
+    db.setTheme(theme);
+  }, [theme]);
+
+  // Boot: Check URL applyToken, test Firestore connection, and enforce Firebase Auth gate
+  useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const token = searchParams.get('applyToken') || searchParams.get('token');
     if (token) {
       setApplyTokenParam(token);
     }
 
-    // Check logged in officer
-    const user = db.getCurrentUser();
-    if (!user) {
-      // Auto assign default pre-approved officer profile for instant field preview
-      const defaultUser: User = {
-        id: 'usr-101',
-        name: 'Hein Htet Oo',
-        email: 'heinhtetoo336123@gmail.com',
-        role: 'ADMIN',
-        badgeNumber: 'IMM-2026',
-        department: 'လူဝင်မှုကြီးကြပ်ရေး ဦးစီးဌာန',
-        station: 'ရန်ကုန် အပြည်ပြည်ဆိုင်ရာ လေဆိပ်ဂိတ်',
-        isPreApproved: true
-      };
-      db.setCurrentUser(defaultUser);
-      setCurrentUser(defaultUser);
-    } else {
-      setCurrentUser(user);
+    if (!isFirebaseConfigured || !auth) {
+      db.setCurrentUser(null);
+      setCurrentUser(null);
+      setAuthReady(true);
+      return;
     }
 
-    setDocuments(db.getDocuments());
+    testFirestoreConnection();
+
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser && firebaseUser.email) {
+        if (!firebaseUser.emailVerified) {
+          if (auth) await signOut(auth).catch(() => {});
+          db.setCurrentUser(null);
+          setCurrentUser(null);
+          setAuthReady(true);
+          return;
+        }
+
+        const authz = await db.checkOfficerAuthorizedAsync(firebaseUser.email);
+        if (authz.authorized) {
+          const verifiedUser: User = {
+            id: firebaseUser.uid,
+            name: firebaseUser.displayName || 'အရာရှိ',
+            email: firebaseUser.email.toLowerCase(),
+            role: authz.role,
+            badgeNumber: `IMM-${firebaseUser.uid.slice(0, 6).toUpperCase()}`,
+            department: 'လူဝင်မှုကြီးကြပ်ရေး ဦးစီးဌာန',
+            station: 'မြို့နယ်ဦးစီးမှူးရုံး',
+            isPreApproved: true
+          };
+          db.setCurrentUser(verifiedUser);
+          setCurrentUser(verifiedUser);
+          setUnauthorizedGateEmail(null);
+          setDocuments(db.getDocuments());
+        } else {
+          if (auth) await signOut(auth).catch(() => {});
+          db.setCurrentUser(null);
+          setCurrentUser(null);
+          setUnauthorizedGateEmail(firebaseUser.email);
+        }
+      } else {
+        db.setCurrentUser(null);
+        setCurrentUser(null);
+      }
+      setAuthReady(true);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
+    setDocuments(db.getDocuments());
+    setActiveTab('dashboard');
   };
 
   const handleLogout = () => {
+    if (auth) {
+      signOut(auth).catch(() => {});
+    }
     db.setCurrentUser(null);
     setCurrentUser(null);
+    setActiveTab('dashboard');
   };
 
   const refreshDocuments = () => {
     setDocuments(db.getDocuments());
   };
 
-  const pendingDocsCount = documents.filter(d => d.syncStatus === 'PENDING').length;
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
 
-  // Render Public Applicant Portal directly if applyToken is present in URL
+  const pendingDocsCount = documents.filter((d) => d.syncStatus === 'PENDING').length;
+
+  // 1. Public Applicant Portal (accessible without officer login via ?applyToken=...)
   if (applyTokenParam) {
     return (
       <PublicApplicantForm
         token={applyTokenParam}
         onBackToApp={() => {
-          // Clear query param and return to main app view
           window.history.replaceState({}, document.title, window.location.pathname);
           setApplyTokenParam(null);
         }}
@@ -81,17 +128,53 @@ export default function App() {
     );
   }
 
+  // 2. Auth resolution splash screen (prevents flashing protected workspace before auth state resolves)
+  if (!authReady) {
+    return (
+      <div className="min-h-screen bg-[#F2F2F7] dark:bg-black flex flex-col items-center justify-center gap-3 p-6">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#0A2E6E] to-[#0055D4] flex items-center justify-center shadow-lg text-white">
+          <ShieldCheck className="w-7 h-7" />
+        </div>
+        <p className="text-sm font-bold text-slate-900 dark:text-white">Golden Gate MM</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">လုံခြုံရေး စိစစ်နေပါသည်...</p>
+      </div>
+    );
+  }
+
+  // 3. Google Login Screen First (Mandatory Security Gate for unauthenticated users)
+  if (!currentUser) {
+    return (
+      <>
+        <AuthScreen
+          currentUser={null}
+          onLogin={handleLogin}
+          onLogout={handleLogout}
+          onNavigateToMain={() => setActiveTab('dashboard')}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          onOpenGoogleOAuthGuide={() => setShowOAuthGuide(true)}
+          initialUnauthorizedEmail={unauthorizedGateEmail}
+          isGateMode={true}
+        />
+        <GoogleOAuthGuideModal
+          isOpen={showOAuthGuide}
+          onClose={() => setShowOAuthGuide(false)}
+        />
+      </>
+    );
+  }
+
+  // 4. Authenticated Officer Workspace (iOS 27 Native Design & Theme)
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col selection:bg-amber-500 selection:text-slate-950 w-full max-w-full overflow-x-hidden">
-      {/* Top Bar Header */}
+    <div className="min-h-screen bg-[#F2F2F7] dark:bg-black text-slate-900 dark:text-slate-100 flex flex-col w-full max-w-full overflow-x-hidden">
       <Header
         user={currentUser}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
         onOpenAuth={() => setActiveTab('auth')}
-        onOpenGoogleOAuthGuide={() => setShowOAuthGuide(true)}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 px-3 sm:px-4 py-4 max-w-5xl mx-auto w-full max-w-full overflow-x-hidden">
+      <main className="flex-1 px-4 sm:px-6 py-5 max-w-6xl mx-auto w-full">
         {activeTab === 'dashboard' && (
           <Dashboard
             user={currentUser}
@@ -102,24 +185,14 @@ export default function App() {
         )}
 
         {activeTab === 'letter' && (
-          <LetterFormatter
-            onSavedToRecords={() => refreshDocuments()}
-          />
+          <LetterFormatter onSavedToRecords={() => refreshDocuments()} />
         )}
 
-        {activeTab === 'apply' && (
-          <ApplyingZone
-            currentUser={currentUser}
-          />
-        )}
+        {activeTab === 'apply' && <ApplyingZone currentUser={currentUser} />}
 
-        {activeTab === 'records' && (
-          <RecordsManager />
-        )}
+        {activeTab === 'records' && <RecordsManager />}
 
-        {activeTab === 'legal' && (
-          <LegalSearch />
-        )}
+        {activeTab === 'legal' && <LegalSearch />}
 
         {activeTab === 'auth' && (
           <AuthScreen
@@ -127,21 +200,20 @@ export default function App() {
             onLogin={handleLogin}
             onLogout={handleLogout}
             onNavigateToMain={() => setActiveTab('dashboard')}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            onOpenGoogleOAuthGuide={() => setShowOAuthGuide(true)}
           />
         )}
       </main>
 
-
-      {/* Offline Status & Auto Sync Banner */}
       <OfflineIndicator />
 
-      {/* Google OAuth Setup Instructions Modal */}
       <GoogleOAuthGuideModal
         isOpen={showOAuthGuide}
         onClose={() => setShowOAuthGuide(false)}
       />
 
-      {/* Mobile Bottom Navigation */}
       <BottomNav
         activeTab={activeTab}
         onTabChange={(tab) => setActiveTab(tab)}

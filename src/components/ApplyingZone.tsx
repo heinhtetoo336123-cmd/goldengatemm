@@ -1,10 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Send, Plus, Copy, Check, QrCode, FileText, Filter, Search, 
-  CheckCircle2, Clock, XCircle, AlertTriangle, Eye, ArrowUpRight, 
-  Trash2, ShieldCheck, Download, Printer, Share2, Sparkles, Building2, User as UserIcon
+import React, { useState, useEffect, useCallback } from 'react';
+import QRCode from 'qrcode';
+import {
+  Send,
+  Plus,
+  Copy,
+  Check,
+  QrCode,
+  FileText,
+  Search,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  AlertTriangle,
+  Download,
+  RefreshCw,
+  Ban,
+  X
 } from 'lucide-react';
-import { ApplicationLink, ApplicationSubmission, ApplicationSubmissionStatus, ApplicationType, User } from '../types';
+import {
+  ApplicationLink,
+  ApplicationSubmission,
+  ApplicationSubmissionStatus,
+  ApplicationType,
+  User
+} from '../types';
 import { db } from '../services/db';
 
 interface ApplyingZoneProps {
@@ -13,13 +32,16 @@ interface ApplyingZoneProps {
 
 export const ApplyingZone: React.FC<ApplyingZoneProps> = ({ currentUser }) => {
   const [activeSubTab, setActiveSubTab] = useState<'GENERATE' | 'ACTIVE_LINKS' | 'SUBMISSIONS'>('GENERATE');
-  
+
   // Link Generator State
   const [selectedAppType, setSelectedAppType] = useState<ApplicationType>('NRC_APP');
   const [townshipInput, setTownshipInput] = useState<string>('မင်္ဂလာဒုံမြို့နယ်');
   const [customNote, setCustomNote] = useState<string>('');
   const [generatedLink, setGeneratedLink] = useState<ApplicationLink | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [copiedToken, setCopiedToken] = useState<boolean>(false);
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // Active Links & Submissions Lists
   const [links, setLinks] = useState<ApplicationLink[]>([]);
@@ -34,323 +56,452 @@ export const ApplyingZone: React.FC<ApplyingZoneProps> = ({ currentUser }) => {
   const [activeSubmission, setActiveSubmission] = useState<ApplicationSubmission | null>(null);
   const [officerNoteInput, setOfficerNoteInput] = useState<string>('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [statusBanner, setStatusBanner] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const officerId = currentUser?.badgeNumber || currentUser?.id || 'usr-101';
+  const officerId = currentUser?.id || '';
+  const officerEmail = currentUser?.email || '';
+  const isAdminUser = currentUser?.role === 'ADMIN';
 
-  const reloadData = () => {
-    const l = db.getApplicationLinks(officerId);
-    setLinks(l);
-    const s = db.getApplicationSubmissions({ officerId });
-    setSubmissions(s);
-  };
+  const reloadData = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const [fetchedLinks, fetchedSubs] = await Promise.all([
+        db.fetchApplicationLinksAsync(officerId, officerEmail, isAdminUser),
+        db.fetchApplicationSubmissionsAsync(officerId, officerEmail, isAdminUser)
+      ]);
+      setLinks(fetchedLinks);
+      setSubmissions(fetchedSubs);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [officerId, officerEmail, isAdminUser]);
 
   useEffect(() => {
     reloadData();
-  }, [currentUser]);
-
-  // Handle Link Generation
-  const handleGenerateLink = (e: React.FormEvent) => {
-    e.preventDefault();
-    const token = `APP-${new Date().getFullYear()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-
-    const newLink = db.saveApplicationLink({
-      token,
-      officerId,
-      officerName: currentUser?.name || 'Hein Htet Oo',
-      officerBadge: currentUser?.badgeNumber || 'IMM-2026',
-      officerStation: currentUser?.station || 'မင်္ဂလာဒုံမြို့နယ် ရုံး',
-      applicationType: selectedAppType,
-      townshipName: townshipInput,
-      customNote: customNote.trim()
-    });
-
-    setGeneratedLink(newLink);
-    reloadData();
-  };
+  }, [reloadData]);
 
   const getFullShareUrl = (token: string) => {
-    const origin = window.location.origin;
-    return `${origin}/?applyToken=${token}`;
+    return `${window.location.origin}/?applyToken=${token}`;
+  };
+
+  // Generate QR Data URL whenever generatedLink changes
+  useEffect(() => {
+    if (!generatedLink) {
+      setQrDataUrl('');
+      return;
+    }
+    const url = getFullShareUrl(generatedLink.token);
+    QRCode.toDataURL(url, {
+      width: 280,
+      margin: 2,
+      color: { dark: '#0A2E6E', light: '#FFFFFF' }
+    })
+      .then(setQrDataUrl)
+      .catch(() => setQrDataUrl(''));
+  }, [generatedLink]);
+
+  const handleGenerateLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!townshipInput.trim()) return;
+    setIsGenerating(true);
+    setStatusBanner(null);
+    try {
+      const token = `APP-${new Date().getFullYear()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+      const newLink = await db.saveApplicationLinkAsync({
+        token,
+        officerId,
+        officerEmail,
+        officerName: currentUser?.name || 'Officer',
+        officerBadge: currentUser?.badgeNumber || 'IMM-2026',
+        officerStation: currentUser?.station || townshipInput.trim(),
+        applicationType: selectedAppType,
+        townshipName: townshipInput.trim(),
+        customNote: customNote.trim()
+      });
+      setGeneratedLink(newLink);
+      await reloadData();
+    } catch {
+      setStatusBanner({ type: 'error', text: 'လင့်ခ်အသစ် သိမ်းဆည်းရာတွင် အခက်အခဲရှိပါသည်။ အင်တာနက်နှင့် Firestore Permission ကို စစ်ဆေးပါ။' });
+      setTimeout(() => setStatusBanner(null), 4000);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleCopyLink = (token: string) => {
-    const url = getFullShareUrl(token);
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(getFullShareUrl(token));
     setCopiedToken(true);
     setTimeout(() => setCopiedToken(false), 2000);
   };
 
+  const handleDownloadQR = () => {
+    if (!qrDataUrl || !generatedLink) return;
+    const link = document.createElement('a');
+    link.href = qrDataUrl;
+    link.download = `QR_${generatedLink.token}.png`;
+    link.click();
+  };
+
   const handleShareViber = (link: ApplicationLink) => {
     const url = getFullShareUrl(link.token);
-    const text = `📌 ${getTypeLabelMM(link.applicationType)} လျှောက်ထားရန် သီးသန့်လင့်ခ်\nတာဝန်ခံ: ${link.officerName} (${link.officerStation})\n\nကျေးဇူးပြု၍ အောက်ပါ လင့်ခ်မှတစ်ဆင့် အချက်အလက်နှင့် စာရွက်စာတမ်းများ တင်သွင်းပါ-\n${url}`;
+    const text = `${getTypeLabelMM(link.applicationType)} လျှောက်ထားရန် သီးသန့်လင့်ခ်\nတာဝန်ခံ: ${link.officerName} (${link.townshipName})\n\nအောက်ပါ လင့်ခ်မှတစ်ဆင့် အချက်အလက်နှင့် စာရွက်စာတမ်းများ တင်သွင်းပါ-\n${url}`;
     window.location.href = `viber://forward?text=${encodeURIComponent(text)}`;
   };
 
-  const handleUpdateStatus = (id: string, newStatus: ApplicationSubmissionStatus) => {
-    db.updateSubmissionStatus(id, newStatus, officerNoteInput.trim());
-    reloadData();
-    if (activeSubmission && activeSubmission.id === id) {
-      setActiveSubmission(prev => prev ? { ...prev, status: newStatus, officerNotes: officerNoteInput.trim() } : null);
+  const handleRevokeLink = async (token: string) => {
+    try {
+      await db.revokeApplicationLinkAsync(token);
+      setStatusBanner({ type: 'success', text: `လင့်ခ် ${token} အား ပိတ်သိမ်းပြီးပါပြီ။` });
+      await reloadData();
+    } catch {
+      setStatusBanner({ type: 'error', text: `လင့်ခ် ${token} အား ပိတ်သိမ်းရာတွင် အခက်အခဲရှိပါသည်။` });
     }
+    setTimeout(() => setStatusBanner(null), 3500);
+  };
+
+  const handleUpdateStatus = async (id: string, newStatus: ApplicationSubmissionStatus) => {
+    try {
+      await db.updateSubmissionStatusAsync(id, newStatus, officerNoteInput.trim());
+      await reloadData();
+      if (activeSubmission && activeSubmission.id === id) {
+        setActiveSubmission((prev) =>
+          prev ? { ...prev, status: newStatus, officerNotes: officerNoteInput.trim() } : null
+        );
+      }
+      setStatusBanner({ type: 'success', text: 'လျှောက်လွှာ စိစစ်မှု အဆင့်အတန်းကို သိမ်းဆည်းပြီးပါပြီ။' });
+    } catch {
+      setStatusBanner({ type: 'error', text: 'လျှောက်လွှာ အဆင့်အတန်း ပြင်ဆင်ရာတွင် အခက်အခဲရှိပါသည်။' });
+    }
+    setTimeout(() => setStatusBanner(null), 3500);
   };
 
   const getTypeLabelMM = (type: ApplicationType) => {
     switch (type) {
-      case 'NRC_APP': return 'နိုင်ငံသားစိစစ်ရေးကတ်ပြား လျှောက်ထားခြင်း';
-      case 'HOUSEHOLD_APP': return 'အိမ်ထောင်စုလူဦးရေစာရင်း လျှောက်ထားခြင်း (ပုံစံ ၆၆/၆)';
-      case 'DECEASED_REMOVAL': return 'အိမ်ထောင်စုစာရင်းမှ သေဆုံးသူ ပယ်ဖျက်ခြင်း';
-      case 'BIRTH_ADDITION': return 'အိမ်ထောင်စုစာရင်းသို့ မွေးဖွားသူ ထည့်သွင်းခြင်း';
-      default: return 'လျှောက်လွှာ';
+      case 'NRC_APP':
+        return 'နိုင်ငံသားစိစစ်ရေးကတ်ပြား လျှောက်ထားခြင်း';
+      case 'HOUSEHOLD_APP':
+        return 'အိမ်ထောင်စုလူဦးရေစာရင်း (ပုံစံ ၆၆/၆)';
+      case 'DECEASED_REMOVAL':
+        return 'အိမ်ထောင်စုစာရင်းမှ သေဆုံးသူ ပယ်ဖျက်ခြင်း';
+      case 'BIRTH_ADDITION':
+        return 'အိမ်ထောင်စုစာရင်းသို့ မွေးဖွားသူ ထည့်သွင်းခြင်း';
+      default:
+        return 'လျှောက်လွှာ';
     }
   };
 
-  const filteredSubmissions = db.getApplicationSubmissions({
-    officerId,
-    status: statusFilter,
-    search: searchQuery
-  }).filter(s => typeFilter === 'ALL' || s.applicationType === typeFilter);
+  const getStatusLabelMM = (status: ApplicationSubmissionStatus) => {
+    switch (status) {
+      case 'APPROVED':
+        return 'အတည်ပြုပြီး';
+      case 'REJECTED':
+        return 'ငြင်းပယ်ထား';
+      case 'REVISION_NEEDED':
+        return 'ပြင်ဆင်ရန်';
+      default:
+        return 'စိစစ်ဆဲ';
+    }
+  };
 
-  const pendingCount = submissions.filter(s => s.status === 'PENDING').length;
+  const filteredSubmissions = submissions.filter((s) => {
+    if (statusFilter !== 'ALL' && s.status !== statusFilter) return false;
+    if (typeFilter !== 'ALL' && s.applicationType !== typeFilter) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const match =
+        s.applicantName.toLowerCase().includes(q) ||
+        s.submissionRef.toLowerCase().includes(q) ||
+        s.applicantPhone.includes(q) ||
+        s.applicantNrc.toLowerCase().includes(q);
+      if (!match) return false;
+    }
+    return true;
+  });
+
+  const pendingCount = submissions.filter((s) => s.status === 'PENDING').length;
 
   return (
-    <div className="space-y-4 pb-20 max-w-4xl mx-auto w-full text-slate-900 font-sans">
-      
-      {/* Header Banner */}
-      <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-blue-950 via-slate-900 to-blue-900 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="space-y-1">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-300 text-[11px] font-black">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>အရာရှိ သီးသန့် လျှောက်လွှာ တင်ဒေတာ စိစစ်ရေးဇုန်</span>
-          </div>
-          <h2 className="text-base sm:text-lg font-black tracking-wide text-white">
-            Applying Zone (လျှောက်လွှာတင်ခြင်း ဇုန်)
-          </h2>
-          <p className="text-xs text-slate-300 font-medium">
-            ပြည်သူများထံမှ လျှောက်လွှာများ တိုက်ရိုက် လက်ခံရန် သီးသန့်လင့်ခ် ထုတ်ပေးခြင်းနှင့် ဒေတာစိစစ် စီမံမှုစနစ်
+    <div className="space-y-5 pb-28 max-w-5xl mx-auto w-full">
+      {/* iOS 27 Large Title Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 px-1">
+        <div className="space-y-0.5">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 tabular-nums">
+            တိုက်ရိုက်ဒေတာလမ်းကြောင်း · စိစစ်ရန် {pendingCount} စောင် · ထုတ်ပေးလင့်ခ် {links.length} ခု
           </p>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            Applying Zone (လျှောက်လွှာတင်ခြင်း ဇုန်)
+          </h1>
         </div>
 
-        {/* Quick Pending Submissions Badge */}
-        <div className="bg-white/10 backdrop-blur-md border border-white/20 p-3 rounded-2xl text-center shrink-0 min-w-[110px]">
-          <span className="text-[10px] text-slate-300 font-bold block">စိစစ်ရန် လျှောက်လွှာ</span>
-          <span className="text-xl font-black text-amber-400">{pendingCount} စောင်</span>
-        </div>
+        <button
+          type="button"
+          onClick={reloadData}
+          disabled={isRefreshing}
+          className="self-start sm:self-auto min-h-[44px] px-4 py-2 rounded-2xl bg-white dark:bg-[#1C1C1E] border border-slate-900/10 dark:border-white/10 text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 ios-press cursor-pointer whitespace-nowrap"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+          <span>ပြန်လည်စစ်ဆေးမည်</span>
+        </button>
       </div>
 
-      {/* Primary Sub-Tab Switcher */}
-      <div className="flex items-center gap-1.5 p-1.5 bg-slate-200/80 rounded-2xl border border-slate-300/80 text-xs font-black">
-        <button
-          onClick={() => setActiveSubTab('GENERATE')}
-          className={`flex-1 py-2 px-3 rounded-xl transition flex items-center justify-center gap-1.5 ${
-            activeSubTab === 'GENERATE'
-              ? 'bg-blue-950 text-white shadow-sm'
-              : 'text-slate-700 hover:text-slate-900'
+      {statusBanner && (
+        <div
+          className={`p-3.5 rounded-2xl border text-xs font-semibold flex items-center gap-2 ${
+            statusBanner.type === 'error'
+              ? 'bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-200'
+              : 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
           }`}
         >
-          <Plus className="w-4 h-4 text-amber-400" />
-          <span>လင့်ခ်သစ် ထုတ်ပေးမည်</span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('ACTIVE_LINKS')}
-          className={`flex-1 py-2 px-3 rounded-xl transition flex items-center justify-center gap-1.5 relative ${
-            activeSubTab === 'ACTIVE_LINKS'
-              ? 'bg-blue-950 text-white shadow-sm'
-              : 'text-slate-700 hover:text-slate-900'
-          }`}
-        >
-          <QrCode className="w-4 h-4" />
-          <span>ထုတ်ပေးထားသော လင့်ခ်များ</span>
-          <span className="bg-slate-300 text-slate-900 text-[10px] px-1.5 py-0.2 rounded-full font-black">
-            {links.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('SUBMISSIONS')}
-          className={`flex-1 py-2 px-3 rounded-xl transition flex items-center justify-center gap-1.5 relative ${
-            activeSubTab === 'SUBMISSIONS'
-              ? 'bg-blue-950 text-white shadow-sm'
-              : 'text-slate-700 hover:text-slate-900'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          <span>လက်ခံရရှိ လျှောက်လွှာများ</span>
-          {pendingCount > 0 && (
-            <span className="bg-rose-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black animate-pulse">
-              {pendingCount}
-            </span>
+          {statusBanner.type === 'error' ? (
+            <XCircle className="w-4 h-4 shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
           )}
+          <span>{statusBanner.text}</span>
+        </div>
+      )}
+
+      {/* iOS 27 Segmented Control */}
+      <div className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-slate-200/80 dark:bg-[#1C1C1E] border border-slate-900/5 dark:border-white/10 text-xs font-semibold">
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('GENERATE')}
+          className={`min-h-[44px] px-2 sm:px-3 py-2 rounded-[14px] transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
+            activeSubTab === 'GENERATE'
+              ? 'bg-white dark:bg-[#2C2C2E] text-slate-900 dark:text-white shadow-sm font-bold'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <Plus className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">လင့်ခ်သစ်</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('ACTIVE_LINKS')}
+          className={`min-h-[44px] px-2 sm:px-3 py-2 rounded-[14px] transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer tabular-nums ${
+            activeSubTab === 'ACTIVE_LINKS'
+              ? 'bg-white dark:bg-[#2C2C2E] text-slate-900 dark:text-white shadow-sm font-bold'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <QrCode className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">လင့်ခ်များ ({links.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('SUBMISSIONS')}
+          className={`min-h-[44px] px-2 sm:px-3 py-2 rounded-[14px] transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer tabular-nums ${
+            activeSubTab === 'SUBMISSIONS'
+              ? 'bg-white dark:bg-[#2C2C2E] text-slate-900 dark:text-white shadow-sm font-bold'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <FileText className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">လျှောက်လွှာ ({pendingCount})</span>
         </button>
       </div>
 
-      {/* SUB-TAB 1: Unique Link Generator Form */}
+      {/* SUB-TAB 1: Unique Link & QR Generator */}
       {activeSubTab === 'GENERATE' && (
-        <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-4 animate-in fade-in">
-          <div className="border-b border-slate-100 pb-2">
-            <h3 className="text-xs font-black text-slate-900 flex items-center gap-2">
-              <QrCode className="w-4 h-4 text-blue-900" />
-              <span>ပြည်သူများသို့ ပေးပို့မည့် သီးသန့် လျှောက်လွှာ လင့်ခ် (Unique Link) ထုတ်ပေးခြင်း</span>
-            </h3>
-            <p className="text-[11px] text-slate-500 font-medium">
-              ထုတ်ပေးလိုက်သော လင့်ခ်မှ တင်သွင်းလာသည့် လျှောက်လွှာများကို သင့်ထံသို့သာ တိုက်ရိုက် လမ်းကြောင်းပေး သိမ်းဆည်းပေးမည် ဖြစ်ပါသည်။
-            </p>
-          </div>
-
-          <form onSubmit={handleGenerateLink} className="space-y-3.5 text-xs font-medium">
-            <div>
-              <label className="block text-[11px] font-bold text-slate-800 mb-1">
-                ၁။ လျှောက်လွှာ အမျိုးအစား ရွေးချယ်ပါ *
-              </label>
-              <select
-                value={selectedAppType}
-                onChange={(e) => setSelectedAppType(e.target.value as ApplicationType)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-900 font-bold focus:border-blue-950 focus:bg-white focus:outline-none"
-              >
-                <option value="NRC_APP">၁။ နိုင်ငံသားစိစစ်ရေးကတ်ပြား လျှောက်ထားခြင်း (NRC Application)</option>
-                <option value="HOUSEHOLD_APP">၂။ အိမ်ထောင်စုလူဦးရေစာရင်း လျှောက်ထားခြင်း (Household List Application)</option>
-                <option value="DECEASED_REMOVAL">၃။ အိမ်ထောင်စုစာရင်းမှ သေဆုံးသူ ပယ်ဖျက်ခြင်း (Deceased Removal)</option>
-                <option value="BIRTH_ADDITION">၄။ အိမ်ထောင်စုစာရင်းသို့ မွေးဖွားသူ ထည့်သွင်းခြင်း (Birth Addition)</option>
-              </select>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          <div className="lg:col-span-7 ios-grouped-card p-5 sm:p-6 space-y-4">
+            <div className="space-y-1">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                သီးသန့် လျှောက်လွှာလင့်ခ် နှင့် QR ထုတ်ပေးခြင်း
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                ဤလင့်ခ်မှ တင်သွင်းသော လျှောက်လွှာများသည် သင့်အကောင့် ({currentUser?.name}) ထံသို့သာ တိုက်ရိုက်ရောက်ရှိပါမည်။
+              </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <form onSubmit={handleGenerateLink} className="space-y-4 text-xs">
               <div>
-                <label className="block text-[11px] font-bold text-slate-800 mb-1">
-                  ၂။ တာဝန်ကျရာ မြို့နယ်/ရုံးစခန်း *
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  ၁။ လျှောက်လွှာ အမျိုးအစား
+                </label>
+                <select
+                  value={selectedAppType}
+                  onChange={(e) => setSelectedAppType(e.target.value as ApplicationType)}
+                  className="w-full min-h-[44px] bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white font-semibold focus:border-[#0055D4] focus:outline-none"
+                >
+                  <option value="NRC_APP">နိုင်ငံသားစိစစ်ရေးကတ်ပြား လျှောက်ထားခြင်း (NRC Application)</option>
+                  <option value="HOUSEHOLD_APP">အိမ်ထောင်စုလူဦးရေစာရင်း လျှောက်ထားခြင်း (ပုံစံ ၆၆/၆)</option>
+                  <option value="DECEASED_REMOVAL">အိမ်ထောင်စုစာရင်းမှ သေဆုံးသူ ပယ်ဖျက်ခြင်း</option>
+                  <option value="BIRTH_ADDITION">အိမ်ထောင်စုစာရင်းသို့ မွေးဖွားသူ ထည့်သွင်းခြင်း</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  ၂။ သက်ဆိုင်ရာ မြို့နယ် / ရုံးစခန်း
                 </label>
                 <input
                   type="text"
                   required
                   value={townshipInput}
                   onChange={(e) => setTownshipInput(e.target.value)}
-                  placeholder="e.g. မင်္ဂလာဒုံမြို့နယ် ဦးစီးမှူးရုံး"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-bold focus:border-blue-950 focus:bg-white focus:outline-none"
+                  className="w-full min-h-[44px] bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white font-semibold focus:border-[#0055D4] focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-800 mb-1">
-                  ၃။ လျှောက်ထားသူထံ အကြောင်းကြားချက် မှတ်စု (Optional)
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  ၃။ လျှောက်ထားသူထံ ညွှန်ကြားချက် မှတ်စု (Optional)
                 </label>
                 <input
                   type="text"
                   value={customNote}
                   onChange={(e) => setCustomNote(e.target.value)}
-                  placeholder="e.g. မင်္ဂလာဒုံရုံး ရုံးချိန်အတွင်း အပြည့်အစုံ ဖြည့်သွင်းပါ"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-medium focus:border-blue-950 focus:bg-white focus:outline-none"
+                  placeholder="ရုံးချိန်အတွင်း စာရွက်စာတမ်းမူရင်း ယူဆောင်လာပါရန်..."
+                  className="w-full min-h-[44px] bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:border-[#0055D4] focus:outline-none"
                 />
               </div>
-            </div>
 
-            <button
-              type="submit"
-              className="w-full py-3 rounded-2xl bg-blue-950 hover:bg-blue-900 text-white font-extrabold text-xs shadow-md transition flex items-center justify-center gap-2"
-            >
-              <QrCode className="w-4 h-4 text-amber-400" />
-              <span>သီးသန့် လင့်ခ် နှင့် QR Code ထုတ်ယူမည်</span>
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={isGenerating}
+                className="w-full min-h-[48px] py-3 px-4 rounded-2xl bg-[#0055D4] hover:bg-[#0A46B8] text-white font-bold text-xs shadow-sm flex items-center justify-center gap-2 ios-press cursor-pointer disabled:opacity-60"
+              >
+                <QrCode className="w-4 h-4" />
+                <span>{isGenerating ? 'ထုတ်ပေးနေပါသည်...' : 'သီးသန့် လင့်ခ် နှင့် QR Code ထုတ်ယူမည်'}</span>
+              </button>
+            </form>
+          </div>
 
-          {/* Generated Link Display Box */}
-          {generatedLink && (
-            <div className="p-4 rounded-2xl bg-emerald-50/90 border border-emerald-200 text-slate-900 space-y-3 animate-in fade-in">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold text-emerald-900 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>သီးသန့် လျှောက်လွှာလင့်ခ် ထုတ်ပေးပြီးပါပြီ</span>
-                </span>
-                <span className="text-[10px] font-mono font-bold text-blue-950 bg-white px-2 py-0.5 rounded border border-slate-200">
-                  TOKEN: {generatedLink.token}
-                </span>
-              </div>
+          {/* Generated Link & QR Code Preview */}
+          <div className="lg:col-span-5 ios-grouped-card p-5 sm:p-6 space-y-4">
+            {generatedLink ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>လင့်ခ် အဆင်သင့်ဖြစ်ပါပြီ</span>
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 tabular-nums">
+                    {generatedLink.token}
+                  </span>
+                </div>
 
-              <div className="bg-white p-3 rounded-xl border border-emerald-200 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 block">မျှဝေရန် လင့်ခ် (Full App URL):</span>
-                <p className="text-xs font-mono font-bold text-blue-950 break-all select-all">
-                  {getFullShareUrl(generatedLink.token)}
+                {qrDataUrl && (
+                  <div className="bg-white rounded-2xl p-4 border border-slate-200 flex flex-col items-center gap-2">
+                    <img
+                      src={qrDataUrl}
+                      alt={`QR code for ${generatedLink.token}`}
+                      className="w-44 h-44 object-contain"
+                    />
+                    <span className="text-[11px] font-mono font-semibold text-slate-600">
+                      {generatedLink.townshipName}
+                    </span>
+                  </div>
+                )}
+
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10">
+                  <p className="text-[11px] font-mono text-slate-800 dark:text-slate-200 break-all select-all">
+                    {getFullShareUrl(generatedLink.token)}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleCopyLink(generatedLink.token)}
+                    className="min-h-[44px] px-3 py-2 rounded-xl bg-[#0055D4] text-white text-xs font-semibold flex items-center justify-center gap-1.5 ios-press cursor-pointer"
+                  >
+                    {copiedToken ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedToken ? 'ကူးပြီး' : 'Copy'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleShareViber(generatedLink)}
+                    className="min-h-[44px] px-3 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold flex items-center justify-center gap-1.5 ios-press cursor-pointer"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Viber</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDownloadQR}
+                    className="min-h-[44px] px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-900 dark:text-white text-xs font-semibold flex items-center justify-center gap-1.5 ios-press cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>QR</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="py-12 text-center space-y-2">
+                <QrCode className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
+                <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  လင့်ခ်နှင့် QR Code ဤနေရာတွင် ပေါ်လာပါမည်
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  ဘယ်ဘက်ရှိ အချက်အလက်များကို ရွေးချယ်၍ ထုတ်ယူပါ
                 </p>
               </div>
-
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => handleCopyLink(generatedLink.token)}
-                  className="px-3.5 py-2 rounded-xl bg-blue-950 text-white text-xs font-bold hover:bg-blue-900 flex items-center gap-1.5 shadow-xs transition"
-                >
-                  {copiedToken ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedToken ? 'လင့်ခ် ကူးယူပြီး' : 'လင့်ခ် ကူးယူမည်'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleShareViber(generatedLink)}
-                  className="px-3.5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Viber ဖြင့် ပို့မည်</span>
-                </button>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
       {/* SUB-TAB 2: Active Links List */}
       {activeSubTab === 'ACTIVE_LINKS' && (
-        <div className="space-y-3 animate-in fade-in">
+        <div className="ios-grouped-card overflow-hidden divide-y divide-slate-200/70 dark:divide-white/10">
           {links.length === 0 ? (
-            <div className="p-8 text-center rounded-3xl bg-white border border-slate-200 space-y-2">
-              <QrCode className="w-8 h-8 text-slate-300 mx-auto" />
-              <p className="text-xs font-bold text-slate-600">ထုတ်ပေးထားသော သီးသန့်လင့်ခ် မရှိသေးပါ</p>
+            <div className="p-10 text-center space-y-2">
+              <QrCode className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                ထုတ်ပေးထားသော သီးသန့်လင့်ခ် မရှိသေးပါ
+              </p>
             </div>
           ) : (
             links.map((link) => (
-              <div key={link.id} className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-blue-900 transition shadow-xs space-y-2.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-0.5">
-                    <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-blue-100 text-blue-950 border border-blue-200">
-                      {getTypeLabelMM(link.applicationType)}
+              <div key={link.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
+                    {getTypeLabelMM(link.applicationType)}
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums truncate">
+                    {link.token} · {link.townshipName} ·{' '}
+                    <span className={link.status === 'ACTIVE' ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : 'text-rose-600 font-semibold'}>
+                      {link.status === 'ACTIVE' ? 'အသုံးပြုနိုင်ဆဲ' : 'ပိတ်သိမ်းပြီး'}
                     </span>
-                    <h4 className="text-xs font-bold text-slate-900 pt-1">
-                      {link.townshipName}
-                    </h4>
-                  </div>
-
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
-                    link.status === 'ACTIVE'
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                      : 'bg-rose-50 text-rose-800 border-rose-200'
-                  }`}>
-                    {link.status === 'ACTIVE' ? 'အသုံးပြုနိုင်ဆဲ' : 'ပယ်ဖျက်ပြီး'}
-                  </span>
+                  </p>
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-slate-600 font-mono font-medium pt-1 border-t border-slate-100">
-                  <span>Token: {link.token}</span>
-                  <span className="font-extrabold text-blue-950 font-sans">
-                    ဝင်ရောက်တင်သွင်းမှု: {link.submissionCount || 0} ခု
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => handleCopyLink(link.token)}
-                    className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold flex items-center gap-1 border border-slate-200"
+                    className="min-h-[40px] px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-800 dark:text-slate-200 text-xs font-semibold flex items-center gap-1 cursor-pointer"
                   >
-                    <Copy className="w-3.5 h-3.5 text-blue-900" />
-                    <span>လင့်ခ် ကူးယူမည်</span>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copy</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => handleShareViber(link)}
-                    className="px-3 py-1.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 text-[11px] font-bold flex items-center gap-1 border border-purple-200"
+                    className="min-h-[40px] px-3 py-1.5 rounded-xl bg-purple-700 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
                   >
                     <Send className="w-3.5 h-3.5" />
                     <span>Viber</span>
                   </button>
+
+                  {link.status === 'ACTIVE' && (
+                    <button
+                      type="button"
+                      onClick={() => handleRevokeLink(link.token)}
+                      className="min-h-[40px] px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                      title="လင့်ခ်ပိတ်သိမ်းမည်"
+                    >
+                      <Ban className="w-3.5 h-3.5" />
+                      <span>ပိတ်မည်</span>
+                    </button>
+                  )}
                 </div>
               </div>
             ))
@@ -358,269 +509,254 @@ export const ApplyingZone: React.FC<ApplyingZoneProps> = ({ currentUser }) => {
         </div>
       )}
 
-      {/* SUB-TAB 3: Received Submissions (Routed Direct to Officer) */}
+      {/* SUB-TAB 3: Received Submissions (Direct to Issuing Officer) */}
       {activeSubTab === 'SUBMISSIONS' && (
-        <div className="space-y-3.5 animate-in fade-in">
-          
-          {/* Filter & Search Toolbar */}
-          <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-3 shadow-xs">
+        <div className="space-y-4">
+          <div className="ios-grouped-card p-4 space-y-3">
             <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="လျှောက်ထားသူ အမည်၊ ဖုန်း၊ NRC သို့မဟုတ် ကုတ်အမှတ်ဖြင့် ရှာဖွေပါ..."
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2 text-xs text-slate-900 font-medium focus:border-blue-950 focus:bg-white focus:outline-none transition"
+                className="w-full min-h-[44px] bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl pl-10 pr-4 py-2 text-xs text-slate-900 dark:text-white focus:border-[#0055D4] focus:outline-none"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[10px] font-extrabold text-slate-500 mb-1">
-                  အဆင့်အတန်း စစ်ထုတ်ရန်:
-                </label>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:border-blue-950 focus:outline-none"
-                >
-                  <option value="ALL">အဆင့်အတန်း အားလုံး</option>
-                  <option value="PENDING">စိစစ်ဆဲ (Pending)</option>
-                  <option value="APPROVED">အတည်ပြုပြီး (Approved)</option>
-                  <option value="REVISED">ပြင်ဆင်ရန် (Revision Needed)</option>
-                  <option value="REJECTED">ငြင်းပယ်ထား (Rejected)</option>
-                </select>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="min-h-[44px] bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white focus:border-[#0055D4] focus:outline-none"
+              >
+                <option value="ALL">အဆင့်အတန်း အားလုံး</option>
+                <option value="PENDING">စိစစ်ဆဲ (Pending)</option>
+                <option value="APPROVED">အတည်ပြုပြီး (Approved)</option>
+                <option value="REVISION_NEEDED">ပြင်ဆင်ရန် (Revision Needed)</option>
+                <option value="REJECTED">ငြင်းပယ်ထား (Rejected)</option>
+              </select>
 
-              <div>
-                <label className="block text-[10px] font-extrabold text-slate-500 mb-1">
-                  အမျိုးအစား စစ်ထုတ်ရန်:
-                </label>
-                <select
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:border-blue-950 focus:outline-none"
-                >
-                  <option value="ALL">အမျိုးအစား အားလုံး</option>
-                  <option value="NRC_APP">နိုင်ငံသားစိစစ်ရေးကတ်</option>
-                  <option value="HOUSEHOLD_APP">အိမ်ထောင်စုဇယား</option>
-                  <option value="DECEASED_REMOVAL">သေဆုံးသူပယ်ဖျက်</option>
-                  <option value="BIRTH_ADDITION">မွေးဖွားသူထည့်သွင်း</option>
-                </select>
-              </div>
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="min-h-[44px] bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white focus:border-[#0055D4] focus:outline-none"
+              >
+                <option value="ALL">လျှောက်လွှာအမျိုးအစား အားလုံး</option>
+                <option value="NRC_APP">နိုင်ငံသားစိစစ်ရေးကတ်</option>
+                <option value="HOUSEHOLD_APP">အိမ်ထောင်စုဇယား</option>
+                <option value="DECEASED_REMOVAL">သေဆုံးသူပယ်ဖျက်</option>
+                <option value="BIRTH_ADDITION">မွေးဖွားသူထည့်သွင်း</option>
+              </select>
             </div>
           </div>
 
-          {/* Submissions List Grid */}
-          <div className="space-y-2.5">
+          <div className="ios-grouped-card overflow-hidden divide-y divide-slate-200/70 dark:divide-white/10">
             {filteredSubmissions.length === 0 ? (
-              <div className="p-8 text-center rounded-3xl bg-white border border-slate-200 space-y-2">
-                <FileText className="w-8 h-8 text-slate-300 mx-auto" />
-                <p className="text-xs font-bold text-slate-600">လက်ခံရရှိထားသော လျှောက်လွှာ မရှိသေးပါ</p>
+              <div className="p-10 text-center space-y-2">
+                <FileText className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  လက်ခံရရှိထားသော လျှောက်လွှာ မရှိသေးပါ
+                </p>
               </div>
             ) : (
               filteredSubmissions.map((sub) => (
-                <div
+                <button
                   key={sub.id}
+                  type="button"
                   onClick={() => {
                     setActiveSubmission(sub);
                     setOfficerNoteInput(sub.officerNotes || '');
                   }}
-                  className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-blue-900 transition cursor-pointer shadow-2xs space-y-2.5 group"
+                  className="w-full p-4 sm:p-5 text-left hover:bg-slate-50 dark:hover:bg-white/5 transition flex items-center justify-between gap-3 cursor-pointer"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-mono font-bold text-[10px] bg-blue-100 text-blue-950 px-2 py-0.5 rounded border border-blue-200">
-                          {sub.submissionRef}
-                        </span>
-                        <span className="text-[10px] font-extrabold text-slate-600">
-                          {getTypeLabelMM(sub.applicationType)}
-                        </span>
-                      </div>
-                      <h4 className="text-sm font-extrabold text-slate-900 group-hover:text-blue-900 transition mt-1">
-                        {sub.applicantName}
-                      </h4>
-                    </div>
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                      {sub.applicantName}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums truncate">
+                      {sub.submissionRef} · {getTypeLabelMM(sub.applicationType)} · ဖုန်း {sub.applicantPhone} · ပုံ {sub.attachments?.length || 0} ပုံ
+                    </p>
+                  </div>
 
-                    {/* Status Badge */}
-                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border shrink-0 ${
+                  <span
+                    className={`inline-flex items-center gap-1 text-xs font-semibold shrink-0 ${
                       sub.status === 'APPROVED'
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        ? 'text-emerald-700 dark:text-emerald-400'
                         : sub.status === 'REJECTED'
-                        ? 'bg-rose-50 text-rose-800 border-rose-200'
+                        ? 'text-rose-600 dark:text-rose-400'
                         : sub.status === 'REVISION_NEEDED'
-                        ? 'bg-amber-50 text-amber-800 border-amber-200'
-                        : 'bg-blue-50 text-blue-950 border-blue-200'
-                    }`}>
-                      {sub.status === 'APPROVED' ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <Clock className="w-3 h-3 text-amber-600" />}
-                      <span>{sub.status === 'APPROVED' ? 'အတည်ပြုပြီး' : sub.status === 'REJECTED' ? 'ငြင်းပယ်ထား' : sub.status === 'REVISION_NEEDED' ? 'ပြင်ဆင်ရန်' : 'စိစစ်ဆဲ'}</span>
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs text-slate-600 pt-1 border-t border-slate-100 font-medium">
-                    <span>ဖုန်း: {sub.applicantPhone}</span>
-                    <span>ပူးတွဲဓာတ်ပုံ: {sub.attachments?.length || 0} ပုံ</span>
-                  </div>
-                </div>
+                        ? 'text-amber-700 dark:text-amber-400'
+                        : 'text-[#0055D4] dark:text-blue-400'
+                    }`}
+                  >
+                    {sub.status === 'APPROVED' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                    <span>{getStatusLabelMM(sub.status)}</span>
+                  </span>
+                </button>
               ))
             )}
           </div>
         </div>
       )}
 
-      {/* SUBMISSION VIEWER & ACTION MODAL */}
+      {/* SUBMISSION VIEWER & ACTION SHEET */}
       {activeSubmission && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-lg rounded-3xl bg-white border border-slate-200 p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto relative text-slate-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-3 sm:p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-lg rounded-[28px] bg-white dark:bg-[#1C1C1E] border border-slate-200 dark:border-white/10 p-5 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto relative text-slate-900 dark:text-slate-100">
             <button
+              type="button"
               onClick={() => setActiveSubmission(null)}
-              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-800 rounded-full bg-slate-100"
+              className="absolute top-4 right-4 min-h-[40px] min-w-[40px] flex items-center justify-center text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-full"
+              aria-label="Close"
             >
-              ✕
+              <X className="w-5 h-5" />
             </button>
 
-            <div className="space-y-1">
-              <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-950 font-mono text-[10px] font-black border border-blue-200">
-                {activeSubmission.submissionRef}
-              </span>
-              <h3 className="text-base font-black text-slate-900">
-                {activeSubmission.applicantName} - {getTypeLabelMM(activeSubmission.applicationType)}
+            <div className="space-y-1 pr-8">
+              <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 tabular-nums">
+                {activeSubmission.submissionRef} · {getStatusLabelMM(activeSubmission.status)}
+              </p>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                {activeSubmission.applicantName}
               </h3>
-              <p className="text-xs text-slate-500 font-bold">
-                တင်သွင်းရက်စွဲ: {new Date(activeSubmission.createdAt).toLocaleString('my-MM')}
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {getTypeLabelMM(activeSubmission.applicationType)}
               </p>
             </div>
 
-            {/* Applicant Details Table */}
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs space-y-2 font-medium">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-slate-400 font-bold block">ဖုန်းနံပါတ်:</span>
-                  <span className="font-extrabold text-slate-900">{activeSubmission.applicantPhone}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-bold block">အဖအမည်:</span>
-                  <span className="font-extrabold text-slate-900">{activeSubmission.fatherName}</span>
-                </div>
+            <div className="divide-y divide-slate-200/70 dark:divide-white/10 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 text-xs">
+              <div className="flex justify-between px-4 py-2.5">
+                <span className="text-slate-500 dark:text-slate-400">ဖုန်းနံပါတ်</span>
+                <span className="font-mono font-semibold tabular-nums">{activeSubmission.applicantPhone}</span>
               </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-slate-400 font-bold block">အမိအမည်:</span>
-                  <span className="font-extrabold text-slate-900">{activeSubmission.motherName}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-bold block">မွေးသက္ကရာဇ်:</span>
-                  <span className="font-extrabold text-slate-900">{activeSubmission.dob || '-'}</span>
-                </div>
+              <div className="flex justify-between px-4 py-2.5">
+                <span className="text-slate-500 dark:text-slate-400">အဖ / အမိ</span>
+                <span className="font-semibold text-right">{activeSubmission.fatherName} / {activeSubmission.motherName}</span>
               </div>
-
-              <div>
-                <span className="text-slate-400 font-bold block">နေရပ်လိပ်စာ:</span>
-                <span className="font-extrabold text-slate-900">{activeSubmission.applicantAddress}</span>
+              <div className="flex justify-between px-4 py-2.5">
+                <span className="text-slate-500 dark:text-slate-400">မွေးသက္ကရာဇ်</span>
+                <span className="font-mono tabular-nums">{activeSubmission.dob || '-'}</span>
               </div>
-
-              {/* Specific fields */}
+              <div className="px-4 py-2.5 space-y-0.5">
+                <span className="text-slate-500 dark:text-slate-400 block">နေရပ်လိပ်စာ</span>
+                <span className="font-medium block">{activeSubmission.applicantAddress}</span>
+              </div>
               {activeSubmission.householdListNo && (
-                <div>
-                  <span className="text-slate-400 font-bold block">အိမ်ထောင်စုဇယား အမှတ်:</span>
-                  <span className="font-extrabold text-blue-900">{activeSubmission.householdListNo}</span>
+                <div className="flex justify-between px-4 py-2.5">
+                  <span className="text-slate-500 dark:text-slate-400">အိမ်ထောင်စုစာရင်း</span>
+                  <span className="font-semibold">{activeSubmission.householdListNo}</span>
                 </div>
               )}
-
               {activeSubmission.deceasedPersonName && (
-                <div>
-                  <span className="text-slate-400 font-bold block">သေဆုံးသူ အမည်:</span>
-                  <span className="font-extrabold text-rose-900">{activeSubmission.deceasedPersonName} ({activeSubmission.dateOfDeath})</span>
+                <div className="flex justify-between px-4 py-2.5">
+                  <span className="text-slate-500 dark:text-slate-400">သေဆုံးသူ</span>
+                  <span className="font-semibold">{activeSubmission.deceasedPersonName} ({activeSubmission.dateOfDeath})</span>
                 </div>
               )}
-
               {activeSubmission.childName && (
-                <div>
-                  <span className="text-slate-400 font-bold block">မွေးဖွားသူ ကလေး အမည်:</span>
-                  <span className="font-extrabold text-emerald-900">{activeSubmission.childName} ({activeSubmission.childDob})</span>
+                <div className="flex justify-between px-4 py-2.5">
+                  <span className="text-slate-500 dark:text-slate-400">မွေးဖွားသူ ကလေး</span>
+                  <span className="font-semibold">{activeSubmission.childName} ({activeSubmission.childDob})</span>
                 </div>
               )}
             </div>
 
-            {/* Submitted Photo Attachments */}
             {activeSubmission.attachments && activeSubmission.attachments.length > 0 && (
               <div className="space-y-2">
-                <span className="text-xs font-black text-slate-800 block">ပူးတွဲပါ စာရွက်စာတမ်း / ဓာတ်ပုံများ:</span>
-                <div className="grid grid-cols-2 gap-2">
+                <span className="text-xs font-bold block">ပူးတွဲပါ စာရွက်စာတမ်းများ</span>
+                <div className="grid grid-cols-2 gap-2.5">
                   {activeSubmission.attachments.map((att, idx) => (
-                    <div
+                    <button
                       key={idx}
+                      type="button"
                       onClick={() => setSelectedImage(att.dataUrl)}
-                      className="border border-slate-200 rounded-xl overflow-hidden cursor-pointer hover:border-blue-900 transition bg-slate-100 group"
+                      className="border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden text-left hover:border-[#0055D4] transition bg-slate-100 dark:bg-white/5 cursor-pointer"
                     >
-                      <img src={att.dataUrl} alt={att.title} className="w-full h-24 object-cover group-hover:scale-105 transition" />
-                      <span className="block text-[10px] font-extrabold p-1.5 text-center text-slate-800 bg-white border-t border-slate-100 truncate">
+                      <img src={att.dataUrl} alt={att.title} className="w-full h-24 object-cover" />
+                      <span className="block text-[11px] font-semibold p-2 text-center truncate">
                         {att.title}
                       </span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Officer Action & Notes */}
-            <div className="space-y-2 pt-2 border-t border-slate-200">
-              <label className="block text-xs font-black text-slate-800">
-                အရာရှိ စိစစ်ချက် မှတ်ချက် / အကြောင်းကြားစာ
-              </label>
-              <textarea
-                rows={2}
-                value={officerNoteInput}
-                onChange={(e) => setOfficerNoteInput(e.target.value)}
-                placeholder="စိစစ်ချက် မှတ်ချက် ရေးသားပါ..."
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 font-medium focus:border-blue-950 focus:outline-none"
-              />
+            <div className="space-y-2.5 pt-2 border-t border-slate-200/70 dark:border-white/10">
+              {(activeSubmission.status === 'APPROVED' || activeSubmission.status === 'REJECTED') && !isAdminUser ? (
+                <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+                  <p className="font-bold text-slate-900 dark:text-white">
+                    စိစစ်ဆုံးဖြတ်ချက် အတည်ပြုပြီး ({getStatusLabelMM(activeSubmission.status)})
+                  </p>
+                  {activeSubmission.officerNotes && (
+                    <p className="text-[11px]">မှတ်ချက်: {activeSubmission.officerNotes}</p>
+                  )}
+                  <p className="text-[11px] text-slate-500">
+                    အတည်ပြု/ငြင်းပယ်ပြီးသော လျှောက်လွှာများကို Admin မှသာ ပြန်လည်ပြင်ဆင်နိုင်ပါသည်။
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <label className="block text-xs font-bold">
+                    အရာရှိ စိစစ်ချက် မှတ်ချက်
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={officerNoteInput}
+                    onChange={(e) => setOfficerNoteInput(e.target.value)}
+                    placeholder="စိစစ်ချက် မှတ်ချက် ရေးသားပါ..."
+                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-3 text-xs focus:border-[#0055D4] focus:outline-none"
+                  />
 
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => handleUpdateStatus(activeSubmission.id, 'APPROVED')}
-                  className="flex-1 py-2 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs flex items-center justify-center gap-1 shadow-xs transition"
-                >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-                  <span>အတည်ပြုမည်</span>
-                </button>
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateStatus(activeSubmission.id, 'APPROVED')}
+                      className="min-h-[44px] py-2 px-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs flex items-center justify-center gap-1 ios-press cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>အတည်ပြုမည်</span>
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleUpdateStatus(activeSubmission.id, 'REVISION_NEEDED')}
-                  className="flex-1 py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs flex items-center justify-center gap-1 shadow-xs transition"
-                >
-                  <AlertTriangle className="w-4 h-4 text-amber-200" />
-                  <span>ပြင်ဆင်ရန်</span>
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateStatus(activeSubmission.id, 'REVISION_NEEDED')}
+                      className="min-h-[44px] py-2 px-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs flex items-center justify-center gap-1 ios-press cursor-pointer"
+                    >
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>ပြင်ဆင်ရန်</span>
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleUpdateStatus(activeSubmission.id, 'REJECTED')}
-                  className="flex-1 py-2 px-3 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-extrabold text-xs flex items-center justify-center gap-1 shadow-xs transition"
-                >
-                  <XCircle className="w-4 h-4 text-rose-200" />
-                  <span>ငြင်းပယ်မည်</span>
-                </button>
-              </div>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateStatus(activeSubmission.id, 'REJECTED')}
+                      className="min-h-[44px] py-2 px-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-semibold text-xs flex items-center justify-center gap-1 ios-press cursor-pointer"
+                    >
+                      <XCircle className="w-4 h-4 shrink-0" />
+                      <span>ငြင်းပယ်မည်</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* FULL-SCREEN IMAGE PREVIEW MODAL */}
+      {/* FULL-SCREEN IMAGE PREVIEW */}
       {selectedImage && (
-        <div className="fixed inset-0 z-50 bg-black/90 p-4 flex items-center justify-center" onClick={() => setSelectedImage(null)}>
+        <div
+          className="fixed inset-0 z-50 bg-black/90 p-4 flex items-center justify-center"
+          onClick={() => setSelectedImage(null)}
+        >
           <div className="relative max-w-2xl w-full">
             <button
+              type="button"
               onClick={() => setSelectedImage(null)}
-              className="absolute -top-10 right-0 text-white font-black text-sm bg-white/20 p-2 rounded-full"
+              className="absolute -top-12 right-0 min-h-[44px] min-w-[44px] text-white bg-white/15 rounded-full flex items-center justify-center"
             >
-              ✕
+              <X className="w-5 h-5" />
             </button>
             <img src={selectedImage} alt="Attachment" className="w-full max-h-[85vh] object-contain rounded-2xl" />
           </div>

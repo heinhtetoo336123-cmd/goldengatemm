@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Printer, Copy, Save, Check, Layers, Plus, Trash2, Edit3, Settings2, X, BookmarkCheck, MapPin, Building2, ChevronDown, Download, Share2, Send, Loader2, Smartphone, Sliders, Radio } from 'lucide-react';
+import { FileText, Printer, Copy, Save, Check, BookmarkCheck, MapPin, Building2, Download, Send, Loader2, Sliders, Radio, Settings2, X, AlertTriangle } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import { OfficialLetterInput, DocumentRecord, LetterPreset, LetterType, TelegramInput, TelegramRoutingRecipient, TelegramPersonnelRow, MasterLetterData } from '../types';
+import { OfficialLetterInput, DocumentRecord, LetterPreset, LetterType, TelegramInput, MasterLetterData } from '../types';
 import { db } from '../services/db';
 import { MYANMAR_ADMINISTRATIVE_DATA, getDistricts, getTownships, findTownshipLocationInfo } from '../data/administrativeData';
 
@@ -51,27 +51,6 @@ const DEPARTMENT_OPTIONS = [
   'CUSTOM'
 ];
 
-const RECIPIENT_OPTIONS = [
-  'ဌာနမှူး\nလူဝင်မှုကြီးကြပ်ရေးဒုတိယဌာနခွဲ(မြိတ်)',
-  'ညွှန်ကြားရေးမှူးချုပ် / တိုင်းဒေသကြီး ဦးစီးမှူးရုံး',
-  'ခရိုင်ဦးစီးမှူး၊ လူဝင်မှုကြီးကြပ်ရေးနှင့်ပြည်သူ့အင်အားဝန်ကြီးဌာန',
-  'မြို့နယ် ရဲတပ်ဖွဲ့မှူးရုံး / သက်ဆိုင်ရာ ဌာန',
-  'မြို့နယ် အုပ်ချုပ်ရေးမှူးရုံး',
-  'မြို့နယ်ရုံး အရာထမ်း/အမှုထမ်း အားလုံး',
-  'သက်ဆိုင်ရာ ဌာနအဖွဲ့အစည်းများ',
-  'CUSTOM'
-];
-
-const SUBJECT_OPTIONS = [
-  'ဖြေရှင်းတင်ပြရန်ကိစ္စ',
-  'နယ်စပ်ဝင်ထွက်ဂိတ် အရေးပေါ် ဖြစ်စဉ် ကြေးနန်းစာ',
-  'မြို့နယ်ရုံး အရာထမ်း/အမှုထမ်းများ တာဝန်ခွဲဝေမှု ရုံးတွင်းအမိန့်စာ',
-  'နိုင်ငံသား/နေထိုင်ခွင့် အထောက်အထား စိစစ်ပြန်ကြားခြင်း',
-  'နေရပ်လိပ်စာနှင့် ဒေသခံဖြစ်ကြောင်း လဝက စိစစ် ထောက်ခံစာ',
-  'ဗီဇာ သက်တမ်းလွန် သတိပေး အကြောင်းကြားစာ',
-  'CUSTOM'
-];
-
 const SENDER_TITLE_OPTIONS = [
   'မြို့နယ်ဦးစီးမှူး',
   'ခရိုင်ဦးစီးမှူး',
@@ -80,10 +59,6 @@ const SENDER_TITLE_OPTIONS = [
   'လက်ထောက်ညွှန်ကြားရေးမှူး',
   'ဦးစီးအရာရှိ',
   'ဒုတိယဦးစီးမှူး',
-  'CUSTOM'
-];
-
-const SENDER_NAME_OPTIONS = [
   'CUSTOM'
 ];
 
@@ -197,13 +172,18 @@ export const LetterFormatter: React.FC<LetterFormatterProps> = ({ onSavedToRecor
 
   // Custom Dropdown Selections
   const [customDept, setCustomDept] = useState(false);
-  const [customRecipient, setCustomRecipient] = useState(false);
-  const [customSubject, setCustomSubject] = useState(false);
-  const [customSenderTitle, setCustomSenderTitle] = useState(false);
-  const [customSenderName, setCustomSenderName] = useState(false);
 
   const [copied, setCopied] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [toastBanner, setToastBanner] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+  const [showSavePresetPromptModal, setShowSavePresetPromptModal] = useState(false);
+  const [savePresetPromptTitle, setSavePresetPromptTitle] = useState('');
+  const [confirmDeletePresetId, setConfirmDeletePresetId] = useState<string | null>(null);
+
+  const showToast = (text: string, kind: 'success' | 'error' = 'success') => {
+    setToastBanner({ kind, text });
+    setTimeout(() => setToastBanner(null), 3500);
+  };
 
   // Client-Side Offline PDF Generation Helper
   const handleDownloadPDF = async () => {
@@ -211,7 +191,7 @@ export const LetterFormatter: React.FC<LetterFormatterProps> = ({ onSavedToRecor
     try {
       const element = document.getElementById('print-area');
       if (!element) {
-        alert('စာရွက် အကြမ်းမတွေ့ပါ');
+        showToast('စာရွက် အကြမ်းမတွေ့ပါ', 'error');
         return;
       }
 
@@ -244,9 +224,10 @@ export const LetterFormatter: React.FC<LetterFormatterProps> = ({ onSavedToRecor
       const fileName = `${safeTitle}_${safeDoc}.pdf`;
 
       pdf.save(fileName);
+      showToast('PDF ဖိုင် ဒေါင်းလုဒ် ရယူပြီးပါပြီ။');
     } catch (err) {
       console.error('PDF generation error:', err);
-      alert('PDF ထုတ်ယူရာတွင် အမှားအယွင်းရှိပါသည်: ' + (err as Error).message);
+      showToast('PDF ထုတ်ယူရာတွင် အမှားအယွင်းရှိပါသည်: ' + (err as Error).message, 'error');
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -544,25 +525,31 @@ ${formInput.copyTo.map((c, i) => `${toMyanmarDigits(i + 1)}။    ${c}`).join('\
     setShowPresetManagerModal(false);
   };
 
-  // Delete Preset
-  const handleDeletePreset = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (window.confirm('ဤ Preset စာပုံစံအား ဖျက်ပစ်ရန် သေချာပါသလား။')) {
-      db.deleteLetterPreset(id);
-      reloadPresets();
-    }
+  // Delete Preset via in-app modal
+  const confirmDeletePreset = () => {
+    if (!confirmDeletePresetId) return;
+    db.deleteLetterPreset(confirmDeletePresetId);
+    reloadPresets();
+    setConfirmDeletePresetId(null);
+    showToast('Preset စာပုံစံ ပယ်ဖျက်ပြီးပါပြီ။');
   };
 
-  // Save Current Form as New Preset
+  // Save Current Form as New Preset via in-app modal
   const handleSaveCurrentAsPreset = () => {
-    const newTitle = prompt('Preset စာခေါင်းစဉ် ရိုက်ထည့်ပါ:', formInput.subject);
+    setSavePresetPromptTitle(formInput.subject || '');
+    setShowSavePresetPromptModal(true);
+  };
+
+  const submitSaveCurrentAsPreset = (e: React.FormEvent) => {
+    e.preventDefault();
+    const newTitle = savePresetPromptTitle.trim();
     if (!newTitle) return;
 
     const info = findTownshipLocationInfo(selectedTownshipId);
 
     db.saveLetterPreset({
       category: 'မြို့နယ် Section အသုံး',
-      title: newTitle.trim(),
+      title: newTitle,
       regionId: selectedRegionId,
       districtId: selectedDistrictId,
       townshipId: selectedTownshipId,
@@ -582,7 +569,8 @@ ${formInput.copyTo.map((c, i) => `${toMyanmarDigits(i + 1)}။    ${c}`).join('\
     });
 
     reloadPresets();
-    alert('Preset စာပုံစံ သိမ်းဆည်းပြီးပါပြီ။');
+    setShowSavePresetPromptModal(false);
+    showToast('Preset စာပုံစံ သိမ်းဆည်းပြီးပါပြီ။');
   };
 
   // Save to Local Records
@@ -704,103 +692,169 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
   const currentTownships = getTownships(selectedRegionId, selectedDistrictId);
 
   return (
-    <div className="space-y-5 pb-24 max-w-4xl mx-auto w-full max-w-full overflow-x-hidden">
-      {/* Sleek Action Toolbar with Document Mode Switcher & Auto-Save */}
-      <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-2xl bg-white border border-slate-200 shadow-xs">
+    <div className="space-y-5 pb-28 max-w-4xl mx-auto w-full overflow-x-hidden">
+      {/* iOS 27 Large Title Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 pt-1 px-1">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-blue-700 dark:text-blue-400">
+            Official Correspondence
+          </p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight mt-0.5">
+            ရုံးစာနှင့် ကြေးနန်း
+          </h1>
+        </div>
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 self-start sm:self-auto">
+          <Check className="w-3.5 h-3.5 shrink-0" />
+          <span>{autoSaveStatus}</span>
+        </span>
+      </div>
+
+      {/* Inline Toast Banner */}
+      {toastBanner && (
+        <div
+          className={`p-3.5 rounded-2xl border text-xs font-semibold flex items-center justify-between gap-2 animate-in fade-in ${
+            toastBanner.kind === 'error'
+              ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'
+              : 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {toastBanner.kind === 'error' ? (
+              <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+            ) : (
+              <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            )}
+            <span>{toastBanner.text}</span>
+          </div>
+          <button type="button" onClick={() => setToastBanner(null)} className="p-1 rounded-lg opacity-70 hover:opacity-100">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Sleek Action Toolbar with Document Mode Switcher */}
+      <div className="ios-grouped-card flex flex-wrap items-center justify-between gap-2.5 p-3">
         <div className="flex flex-wrap items-center gap-2">
-          {/* Location Settings Button ("ဆက်တင် ပုံစံမျိုး") */}
+          {/* Location Settings Button */}
           <button
+            type="button"
             onClick={() => setShowLocationModal(true)}
-            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-900 font-extrabold text-xs flex items-center gap-1.5 transition"
+            className="min-h-[40px] px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-zinc-100 font-bold text-xs flex items-center gap-1.5 transition"
             title="တိုင်း/ခရိုင်/မြို့နယ် တည်နေရာ ဆက်တင်"
           >
-            <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+            <MapPin className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
             <span className="max-w-[140px] sm:max-w-[200px] truncate">
               {findTownshipLocationInfo(selectedTownshipId).fullLocationMM || 'ရုံးတည်နေရာ'}
             </span>
-            <Settings2 className="w-3 h-3 text-slate-500 shrink-0" />
+            <Settings2 className="w-3 h-3 text-slate-500 dark:text-zinc-400 shrink-0" />
           </button>
 
-          {/* Document Type Switcher (ရုံးစာ vs တရားဝင် ကြေးနန်းစာ) */}
-          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 shrink-0">
+          {/* Document Type Switcher */}
+          <div className="flex items-center gap-1 p-1 bg-slate-200/75 dark:bg-zinc-800 rounded-xl shrink-0">
             <button
+              type="button"
               onClick={() => setDocMode('COVER_LETTER')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+              className={`min-h-[34px] px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap ${
                 docMode === 'COVER_LETTER'
-                  ? 'bg-blue-900 text-white shadow-2xs'
-                  : 'text-slate-700 hover:text-slate-900'
+                  ? 'bg-white dark:bg-zinc-700 text-blue-800 dark:text-white shadow-xs'
+                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>ရုံးစာ (အပေါ်စာ)</span>
+              <span>ရုံးစာ</span>
             </button>
             <button
+              type="button"
               onClick={() => setDocMode('TELEGRAM')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+              className={`min-h-[34px] px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap ${
                 docMode === 'TELEGRAM'
-                  ? 'bg-purple-900 text-white shadow-2xs'
-                  : 'text-slate-700 hover:text-slate-900'
+                  ? 'bg-white dark:bg-zinc-700 text-purple-800 dark:text-purple-200 shadow-xs'
+                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Radio className="w-3.5 h-3.5 text-amber-400" />
-              <span>တရားဝင် ကြေးနန်းစာ</span>
+              <Radio className="w-3.5 h-3.5 text-amber-500" />
+              <span>ကြေးနန်းစာ</span>
             </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Subtle Auto-Save Draft Indicator */}
-          <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
-            <Check className="w-3 h-3 text-emerald-600" />
-            <span>{autoSaveStatus}</span>
-          </span>
-
-          {/* View Switcher Tabs */}
-          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 shrink-0">
-            <button
-              onClick={() => setActiveTab('edit')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                activeTab === 'edit'
-                  ? 'bg-blue-900 text-white shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              အချက်အလက် ရိုက်ထည့်
-            </button>
-            <button
-              onClick={() => setActiveTab('preview')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                activeTab === 'preview'
-                  ? 'bg-blue-900 text-white shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              စာရွက် ပုံစံ ကြည့်မည်
-            </button>
-          </div>
+        {/* View Switcher Tabs */}
+        <div className="flex items-center gap-1 p-1 bg-slate-200/75 dark:bg-zinc-800 rounded-xl shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveTab('edit')}
+            className={`min-h-[34px] px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${
+              activeTab === 'edit'
+                ? 'bg-white dark:bg-zinc-700 text-slate-900 dark:text-white shadow-xs'
+                : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            ရိုက်ထည့်မည်
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('preview')}
+            className={`min-h-[34px] px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${
+              activeTab === 'preview'
+                ? 'bg-white dark:bg-zinc-700 text-slate-900 dark:text-white shadow-xs'
+                : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            စာရွက်ကြည့်မည်
+          </button>
         </div>
       </div>
 
-
+      {/* Quick Preset Strip (when in Cover Letter edit mode) */}
+      {activeTab === 'edit' && docMode === 'COVER_LETTER' && displayPresets.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 px-0.5">
+          <span className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 shrink-0">စာပုံစံများ:</span>
+          {displayPresets.slice(0, 8).map((preset) => {
+            const active = selectedPresetId === preset.id;
+            return (
+              <div key={preset.id} className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleSelectPreset(preset)}
+                  className={`min-h-[34px] px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                    active
+                      ? 'bg-blue-700 dark:bg-blue-600 text-white'
+                      : 'bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-50 dark:hover:bg-zinc-800'
+                  }`}
+                >
+                  {preset.title}
+                </button>
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => handleOpenEditPreset()}
+            className="min-h-[34px] px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-800 text-blue-700 dark:text-blue-400 font-bold text-xs whitespace-nowrap shrink-0"
+          >
+            + ပုံစံသစ်
+          </button>
+        </div>
+      )}
 
       {activeTab === 'edit' ? (
         docMode === 'TELEGRAM' ? (
-          /* Dedicated Telegram Form Controls (Exact match to Myanmar Government Telegram IMG_7026) */
-          <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-sm text-slate-900">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
-              <h3 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
-                <Radio className="w-4 h-4 text-purple-700" />
-                <span>တရားဝင် ကြေးနန်းစာ ရေးသားခြင်း (Official Telegram Form)</span>
+          /* Dedicated Telegram Form Controls */
+          <div className="ios-grouped-card p-5 space-y-4 text-slate-900 dark:text-zinc-100">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <h3 className="text-xs font-extrabold flex items-center gap-1.5">
+                <Radio className="w-4 h-4 text-purple-700 dark:text-purple-400" />
+                <span>တရားဝင် ကြေးနန်းစာ ရေးသားခြင်း</span>
               </h3>
-              <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-200">
-                တံဆိပ်တုံးနေရာ လွတ်ထားမည် (ထုတ်ပြီးမှ လက်တွေ့ထုရန်)
+              <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                တံဆိပ်တုံးနေရာ လွတ်ထားမည်
               </span>
             </div>
 
             {/* Row 1: Telegram No & DateTime Group (DTG) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-purple-50/50 p-3 rounded-xl border border-purple-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-purple-50/60 dark:bg-purple-950/30 p-3.5 rounded-2xl border border-purple-100 dark:border-purple-900/50">
               <div>
-                <label className="block text-[11px] font-bold text-slate-800 mb-1">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-zinc-300 mb-1">
                   ကြေးနန်းစာအမှတ် (Telegram Reference No.)
                 </label>
                 <input
@@ -808,11 +862,11 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                   value={telegramInput.telegramNo}
                   onChange={(e) => setTelegramInput({ ...telegramInput, telegramNo: e.target.value })}
                   placeholder="e.g. ၀၀၆ / အခမ ၊ ၊"
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:border-purple-800 focus:outline-none"
+                  className="w-full min-h-[42px] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white focus:border-purple-600 focus:outline-none"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-800 mb-1">
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-zinc-300 mb-1">
                   ရက်စွဲ/အချိန် (Date-Time Group / DTG)
                 </label>
                 <input
@@ -820,16 +874,16 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                   value={telegramInput.dateTimeGroup}
                   onChange={(e) => setTelegramInput({ ...telegramInput, dateTimeGroup: e.target.value })}
                   placeholder="e.g. ၂၀၂၆ ဇန် ၂၂ ၁၆၀၀"
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:border-purple-800 focus:outline-none"
+                  className="w-full min-h-[42px] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white focus:border-purple-600 focus:outline-none"
                 />
               </div>
             </div>
 
-            {/* Routing Recipients List: (ပ), (လ), (တ)... */}
-            <div className="space-y-2 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+            {/* Routing Recipients List */}
+            <div className="space-y-2 bg-slate-50 dark:bg-zinc-900/80 p-3.5 rounded-2xl border border-slate-200 dark:border-zinc-800">
               <div className="flex items-center justify-between">
-                <label className="block text-[11px] font-bold text-slate-800">
-                  ထိပ်စီး လမ်းကြောင်းနှင့် လက်ခံသူများ (Routing: ပ၊ လ၊ တ...)
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-zinc-300">
+                  ထိပ်စီး လမ်းကြောင်းနှင့် လက်ခံသူများ (ပ၊ လ၊ တ...)
                 </label>
                 <button
                   type="button"
@@ -841,9 +895,9 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                       routingRecipients: [...telegramInput.routingRecipients, { code: nextCode, office: '' }]
                     });
                   }}
-                  className="text-xs text-purple-900 font-extrabold hover:underline"
+                  className="text-xs text-purple-800 dark:text-purple-400 font-bold hover:underline"
                 >
-                  + လက်ခံသူ ထပ်ထည့်မည်
+                  + လက်ခံသူ ထည့်မည်
                 </button>
               </div>
 
@@ -857,7 +911,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                       updated[idx].code = e.target.value;
                       setTelegramInput({ ...telegramInput, routingRecipients: updated });
                     }}
-                    className="w-16 bg-white border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-900 font-bold text-center"
+                    className="w-16 min-h-[40px] bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-2 py-1.5 text-xs text-slate-900 dark:text-white font-bold text-center"
                   />
                   <input
                     type="text"
@@ -868,7 +922,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                       setTelegramInput({ ...telegramInput, routingRecipients: updated });
                     }}
                     placeholder="e.g. ခရမ၊ လဝပ၊ မူဆယ်"
-                    className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 font-medium"
+                    className="flex-1 min-h-[40px] bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white font-medium"
                   />
                   {telegramInput.routingRecipients.length > 1 && (
                     <button
@@ -877,7 +931,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                         const updated = telegramInput.routingRecipients.filter((_, i) => i !== idx);
                         setTelegramInput({ ...telegramInput, routingRecipients: updated });
                       }}
-                      className="text-slate-400 hover:text-rose-600 p-1.5 text-xs font-bold"
+                      className="text-slate-400 hover:text-rose-600 p-2 text-xs font-bold"
                     >
                       ✕
                     </button>
@@ -889,8 +943,8 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
             {/* Paragraphs */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <label className="block text-[11px] font-bold text-slate-800">
-                  ကြေးနန်း စာပိုဒ်များ (၁၊ ၂၊ ၃၊ ၄၊ ၅...)
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-zinc-300">
+                  ကြေးနန်း စာပိုဒ်များ
                 </label>
                 <button
                   type="button"
@@ -900,15 +954,15 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                       paragraphs: [...telegramInput.paragraphs, `(${toMyanmarDigits(telegramInput.paragraphs.length + 1)})    `]
                     });
                   }}
-                  className="text-xs text-purple-900 font-extrabold hover:underline"
+                  className="text-xs text-purple-800 dark:text-purple-400 font-bold hover:underline"
                 >
-                  + စာပိုဒ် အသစ်ထည့်မည်
+                  + စာပိုဒ် ထည့်မည်
                 </button>
               </div>
 
               {telegramInput.paragraphs.map((p, idx) => (
                 <div key={idx} className="flex gap-2 items-start">
-                  <span className="text-xs font-bold text-slate-400 pt-2 shrink-0 w-6 text-right">
+                  <span className="text-xs font-bold text-slate-400 dark:text-zinc-500 pt-2.5 shrink-0 w-6 text-right">
                     {idx + 1}။
                   </span>
                   <textarea
@@ -919,7 +973,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                       updated[idx] = e.target.value;
                       setTelegramInput({ ...telegramInput, paragraphs: updated });
                     }}
-                    className="flex-1 bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 font-medium focus:border-purple-800 focus:outline-none focus:bg-white"
+                    className="flex-1 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white font-medium focus:border-purple-600 focus:outline-none"
                   />
                   {telegramInput.paragraphs.length > 1 && (
                     <button
@@ -928,7 +982,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                         const updated = telegramInput.paragraphs.filter((_, i) => i !== idx);
                         setTelegramInput({ ...telegramInput, paragraphs: updated });
                       }}
-                      className="text-slate-400 hover:text-rose-600 p-1 text-xs font-bold"
+                      className="text-slate-400 hover:text-rose-600 p-1.5 text-xs font-bold"
                     >
                       ✕
                     </button>
@@ -937,11 +991,11 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
               ))}
             </div>
 
-            {/* Personnel List (Sub-table for Transfer/Deployment list in Telegram) */}
-            <div className="space-y-2 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+            {/* Personnel List */}
+            <div className="space-y-2 bg-slate-50 dark:bg-zinc-900/80 p-3.5 rounded-2xl border border-slate-200 dark:border-zinc-800">
               <div className="flex items-center justify-between">
-                <label className="block text-[11px] font-bold text-slate-800">
-                  အရာထမ်း/အမှုထမ်း စာရင်းဇယား (က၊ ခ၊ ဂ၊ ဃ၊ င...)
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-zinc-300">
+                  အရာထမ်း/အမှုထမ်း စာရင်းဇယား
                 </label>
                 <button
                   type="button"
@@ -956,9 +1010,9 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                       ]
                     });
                   }}
-                  className="text-xs text-purple-900 font-extrabold hover:underline"
+                  className="text-xs text-purple-800 dark:text-purple-400 font-bold hover:underline"
                 >
-                  + ဝန်ထမ်း အမည်ထည့်မည်
+                  + ဝန်ထမ်း ထည့်မည်
                 </button>
               </div>
 
@@ -972,7 +1026,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                       updated[idx].code = e.target.value;
                       setTelegramInput({ ...telegramInput, personnelList: updated });
                     }}
-                    className="col-span-2 bg-white border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-900 text-center font-bold"
+                    className="col-span-2 min-h-[38px] bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-2 py-1.5 text-xs text-slate-900 dark:text-white text-center font-bold"
                   />
                   <input
                     type="text"
@@ -983,29 +1037,29 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                       updated[idx].serialNo = e.target.value;
                       setTelegramInput({ ...telegramInput, personnelList: updated });
                     }}
-                    className="col-span-3 bg-white border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-900 font-medium"
+                    className="col-span-3 min-h-[38px] bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-2 py-1.5 text-xs text-slate-900 dark:text-white font-medium"
                   />
                   <input
                     type="text"
                     value={row.rankName}
-                    placeholder="ဒု-လဝကမှူး ဦးမျိုးသိန်းအေး"
+                    placeholder="ဒု-လဝကမှူး ..."
                     onChange={(e) => {
                       const updated = [...telegramInput.personnelList];
                       updated[idx].rankName = e.target.value;
                       setTelegramInput({ ...telegramInput, personnelList: updated });
                     }}
-                    className="col-span-4 bg-white border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-900 font-medium"
+                    className="col-span-4 min-h-[38px] bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-2 py-1.5 text-xs text-slate-900 dark:text-white font-medium"
                   />
                   <input
                     type="text"
                     value={row.station}
-                    placeholder="မူဆယ်(မနမ)"
+                    placeholder="မြို့နယ်"
                     onChange={(e) => {
                       const updated = [...telegramInput.personnelList];
                       updated[idx].station = e.target.value;
                       setTelegramInput({ ...telegramInput, personnelList: updated });
                     }}
-                    className="col-span-2 bg-white border border-slate-300 rounded-xl px-2 py-1.5 text-xs text-slate-900 font-medium"
+                    className="col-span-2 min-h-[38px] bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-2 py-1.5 text-xs text-slate-900 dark:text-white font-medium"
                   />
                   <button
                     type="button"
@@ -1024,98 +1078,94 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
             {/* Dispatch method & Security rating */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  ပေးပို့သည့်နည်းလမ်း (Dispatch Method)
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
+                  ပေးပို့သည့်နည်းလမ်း
                 </label>
                 <input
                   type="text"
                   value={telegramInput.dispatchMethod}
                   onChange={(e) => setTelegramInput({ ...telegramInput, dispatchMethod: e.target.value })}
-                  placeholder="e.g. သင့်ရာနည်းဖြင့် / Viber ဖြင့်"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:border-purple-800 focus:outline-none"
+                  className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white focus:border-purple-600 focus:outline-none"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  အဆင့်အတန်း (Security / Urgency Grade)
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
+                  အဆင့်အတန်း
                 </label>
                 <input
                   type="text"
                   value={telegramInput.securityLevel}
                   onChange={(e) => setTelegramInput({ ...telegramInput, securityLevel: e.target.value })}
-                  placeholder="e.g. အဆင့်အတန်း / လျှို့ဝှက်"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:border-purple-800 focus:outline-none"
+                  className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white focus:border-purple-600 focus:outline-none"
                 />
               </div>
             </div>
 
             {/* Signatory */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-zinc-800">
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
                   လက်မှတ်ထိုးသူ ရာထူး
                 </label>
                 <input
                   type="text"
                   value={telegramInput.signatoryTitle}
                   onChange={(e) => setTelegramInput({ ...telegramInput, signatoryTitle: e.target.value })}
-                  placeholder="e.g. ခရိုင်ဦးစီးမှူး"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:border-purple-800 focus:outline-none"
+                  className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white focus:border-purple-600 focus:outline-none"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
                   လက်မှတ်ထိုးသူ အမည်
                 </label>
                 <input
                   type="text"
                   value={telegramInput.signatoryName}
                   onChange={(e) => setTelegramInput({ ...telegramInput, signatoryName: e.target.value })}
-                  placeholder="e.g. (ထွန်းဇော်ဦး၊ ဒုတိယညွှန်ကြားရေးမှူး)"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:border-purple-800 focus:outline-none"
+                  className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white focus:border-purple-600 focus:outline-none"
                 />
               </div>
             </div>
 
             {/* Submit button */}
-            <div className="pt-3 border-t border-slate-200 flex justify-end">
+            <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 flex justify-end">
               <button
                 type="button"
                 onClick={() => setActiveTab('preview')}
-                className="px-5 py-2.5 rounded-xl bg-purple-900 hover:bg-purple-800 text-white font-extrabold text-xs shadow-2xs"
+                className="min-h-[44px] px-5 py-2.5 rounded-2xl bg-purple-800 hover:bg-purple-700 text-white font-bold text-xs ios-press"
               >
-                ကြေးနန်းစာ ပုံစံ စစ်ဆေးမည် (Telegram Preview) →
+                ကြေးနန်းစာ ပုံစံ ကြည့်မည် →
               </button>
             </div>
           </div>
         ) : (
           /* Cover Letter Form Controls */
-          <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-sm">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <h3 className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
-                <Building2 className="w-4 h-4 text-blue-900" />
+          <div className="ios-grouped-card p-5 space-y-4 text-slate-900 dark:text-zinc-100">
+            <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <h3 className="text-xs font-extrabold flex items-center gap-1.5">
+                <Building2 className="w-4 h-4 text-blue-700 dark:text-blue-400" />
                 <span>ရုံးစာ (အပေါ်စာ) အသေးစိတ် အချက်အလက်များ</span>
               </h3>
               <button
                 type="button"
                 onClick={handleSaveCurrentAsPreset}
-                className="text-[11px] font-bold text-blue-900 hover:underline flex items-center gap-1"
+                className="text-[11px] font-bold text-blue-700 dark:text-blue-400 hover:underline flex items-center gap-1"
               >
                 <BookmarkCheck className="w-3.5 h-3.5" />
-                <span>လက်ရှိ စာပုံစံအား Preset အဖြစ် သိမ်းမည်</span>
+                <span>လက်ရှိ စာပုံစံအား Preset သိမ်းမည်</span>
               </button>
             </div>
 
           {/* Classifications & Urgency Selectors (Dropdowns) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-blue-50/60 p-3 rounded-xl border border-blue-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-blue-50/70 dark:bg-blue-950/30 p-3.5 rounded-2xl border border-blue-100 dark:border-blue-900/50">
             <div>
-              <label className="block text-[11px] font-bold text-slate-800 mb-1">
-                စာ၏ လုံခြုံမှုအဆင့်အတန်း (Classification Dropdown)
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                လုံခြုံမှုအဆင့်အတန်း
               </label>
               <select
                 value={formInput.classification}
                 onChange={(e) => setFormInput({ ...formInput, classification: e.target.value as any })}
-                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:border-blue-900 focus:outline-none"
+                className="w-full min-h-[42px] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-semibold focus:border-blue-600 focus:outline-none"
               >
                 <option value="NONE">ဖြုတ်ထားတာ (မပါတာ)</option>
                 <option value="RESTRICTED">ကန့်သတ် (Restricted)</option>
@@ -1126,13 +1176,13 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-slate-800 mb-1">
-                ဦးစားပေးအဆင့်အတန်း (Urgency Priority Dropdown)
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                ဦးစားပေးအဆင့်အတန်း
               </label>
               <select
                 value={formInput.urgency}
                 onChange={(e) => setFormInput({ ...formInput, urgency: e.target.value as any })}
-                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:border-blue-900 focus:outline-none"
+                className="w-full min-h-[42px] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-semibold focus:border-blue-600 focus:outline-none"
               >
                 <option value="ORDINARY">၁။ ရိုးရိုး (Ordinary)</option>
                 <option value="IMPORTANT">၂။ အရေးကြီး (Important)</option>
@@ -1144,13 +1194,13 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
 
           {/* Letter Layout Type Selector Dropdown */}
           <div>
-            <label className="block text-[11px] font-bold text-slate-700 mb-1">
-              စာ အမျိုးအစား ပုံစံ (Letter Type Dropdown)
+            <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
+              စာ အမျိုးအစား ပုံစံ
             </label>
             <select
               value={formInput.letterType}
               onChange={(e) => setFormInput({ ...formInput, letterType: e.target.value as LetterType })}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:border-blue-900 focus:outline-none"
+              className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-semibold focus:border-blue-600 focus:outline-none"
             >
               <option value="COVER_LETTER">ရုံးစာ (အပေါ်စာ / Cover Letter)</option>
               <option value="TELEGRAM">ကြေးနန်းစာ (Telegram)</option>
@@ -1164,25 +1214,25 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
           {/* Document Number & Date */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
                 စာအမှတ် (Document Ref No.)
               </label>
               <input
                 type="text"
                 value={formInput.docNumber}
                 onChange={(e) => setFormInput({ ...formInput, docNumber: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:border-blue-900 focus:outline-none focus:bg-white transition"
+                className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-semibold focus:border-blue-600 focus:outline-none transition"
               />
             </div>
             <div>
-              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
                 ရက်စွဲ (Date)
               </label>
               <input
                 type="date"
                 value={formInput.date}
                 onChange={(e) => setFormInput({ ...formInput, date: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:border-blue-900 focus:outline-none focus:bg-white transition"
+                className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-semibold focus:border-blue-600 focus:outline-none transition"
               />
             </div>
           </div>
@@ -1190,8 +1240,8 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
           {/* Department Selector Dropdown */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                ဌာန / ဦးစီးမှူးရုံး (Department Dropdown)
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
+                ဌာန / ဦးစီးမှူးရုံး
               </label>
               <select
                 value={customDept ? 'CUSTOM' : formInput.department}
@@ -1203,7 +1253,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                     setFormInput({ ...formInput, department: e.target.value });
                   }
                 }}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:border-blue-900 focus:outline-none"
+                className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-semibold focus:border-blue-600 focus:outline-none"
               >
                 {DEPARTMENT_OPTIONS.map((opt, i) => (
                   <option key={i} value={opt}>
@@ -1217,29 +1267,28 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                   value={formInput.department}
                   onChange={(e) => setFormInput({ ...formInput, department: e.target.value })}
                   placeholder="ဌာနအမည် ရိုက်ထည့်ပါ..."
-                  className="w-full mt-2 bg-white border border-blue-400 rounded-xl px-3 py-1.5 text-xs text-slate-900 font-bold"
+                  className="w-full mt-2 min-h-[40px] bg-white dark:bg-zinc-800 border border-blue-500 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white font-semibold"
                 />
               )}
             </div>
 
-            {/* Office Location Dropdown */}
             <div>
-              <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                ရုံးတည်နေရာ / မြို့ (Office Location Dropdown)
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
+                ရုံးတည်နေရာ / မြို့
               </label>
               <input
                 type="text"
                 value={formInput.officeLocation}
                 onChange={(e) => setFormInput({ ...formInput, officeLocation: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:border-blue-900 focus:outline-none focus:bg-white transition font-bold"
+                className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:border-blue-600 focus:outline-none transition font-semibold"
               />
             </div>
           </div>
 
-          {/* 1. Recipient (ပေးပို့ခြင်း) - Blank default with dynamic master data dropdown */}
+          {/* 1. Recipient */}
           <div>
             <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
-              <label className="block text-[11px] font-bold text-slate-700">
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400">
                 ပေးပို့ခြင်း (Recipient Dropdown)
               </label>
               <select
@@ -1249,7 +1298,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                     setFormInput({ ...formInput, recipient: e.target.value });
                   }
                 }}
-                className="text-[10px] bg-blue-50 text-blue-900 font-extrabold border border-blue-200 rounded-lg px-2 py-0.5 focus:outline-none cursor-pointer"
+                className="text-[11px] bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-800 rounded-lg px-2.5 py-1 focus:outline-none cursor-pointer"
               >
                 <option value="">▼ မာစတာဒေတာမှ ရွေးရန်</option>
                 {masterData.recipients.map((opt, i) => (
@@ -1263,15 +1312,15 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
               rows={2}
               value={formInput.recipient}
               onChange={(e) => setFormInput({ ...formInput, recipient: e.target.value })}
-              placeholder="ပေးပို့မည့် ဌာန/ရာထူး ရိုက်ထည့်ပါ ( သို့မဟုတ် အပေါ်ရှိ မာစတာဒေတာမှ ရွေးချယ်ပါ )..."
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 font-bold focus:border-blue-900 focus:outline-none focus:bg-white transition"
+              placeholder="ပေးပို့မည့် ဌာန/ရာထူး ရိုက်ထည့်ပါ..."
+              className="w-full bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white font-semibold focus:border-blue-600 focus:outline-none transition"
             />
           </div>
 
-          {/* 2. Subject Header (အကြောင်းအရာ) - Blank default with dynamic master data dropdown */}
+          {/* 2. Subject Header */}
           <div>
             <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
-              <label className="block text-[11px] font-bold text-slate-700">
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400">
                 အကြောင်းအရာ (Subject Header Dropdown)
               </label>
               <select
@@ -1281,7 +1330,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                     setFormInput({ ...formInput, subject: e.target.value });
                   }
                 }}
-                className="text-[10px] bg-blue-50 text-blue-900 font-extrabold border border-blue-200 rounded-lg px-2 py-0.5 focus:outline-none cursor-pointer"
+                className="text-[11px] bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-800 rounded-lg px-2.5 py-1 focus:outline-none cursor-pointer"
               >
                 <option value="">▼ မာစတာဒေတာမှ ရွေးရန်</option>
                 {masterData.subjects.map((opt, i) => (
@@ -1295,15 +1344,15 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
               type="text"
               value={formInput.subject}
               onChange={(e) => setFormInput({ ...formInput, subject: e.target.value })}
-              placeholder="အကြောင်းအရာ ရိုက်ထည့်ပါ ( သို့မဟုတ် အပေါ်ရှိ မာစတာဒေတာမှ ရွေးချယ်ပါ )..."
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:border-blue-900 focus:outline-none focus:bg-white transition"
+              placeholder="အကြောင်းအရာ ရိုက်ထည့်ပါ..."
+              className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-semibold focus:border-blue-600 focus:outline-none transition"
             />
           </div>
 
-          {/* 3. Reference Text (ရည်ညွှန်းချက် - Optional) - Blank default with dynamic master data dropdown */}
+          {/* 3. Reference Text (Optional) */}
           <div>
             <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
-              <label className="block text-[11px] font-bold text-slate-700">
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400">
                 ရည်ညွှန်းချက် (Reference Text - Optional)
               </label>
               <select
@@ -1313,7 +1362,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                     setFormInput({ ...formInput, referenceText: e.target.value });
                   }
                 }}
-                className="text-[10px] bg-blue-50 text-blue-900 font-extrabold border border-blue-200 rounded-lg px-2 py-0.5 focus:outline-none cursor-pointer"
+                className="text-[11px] bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-800 rounded-lg px-2.5 py-1 focus:outline-none cursor-pointer"
               >
                 <option value="">▼ မာစတာဒေတာမှ ရွေးရန်</option>
                 {masterData.referenceTexts.map((opt, i) => (
@@ -1327,14 +1376,14 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
               type="text"
               value={formInput.referenceText}
               onChange={(e) => setFormInput({ ...formInput, referenceText: e.target.value })}
-              placeholder="ရည်ညွှန်းချက် ရိုက်ထည့်ပါ ( Optional - အပေါ်ရှိ မာစတာဒေတာမှ ရွေးချယ်နိုင်သည် )..."
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium focus:border-blue-900 focus:outline-none focus:bg-white transition"
+              placeholder="ရည်ညွှန်းချက် ရိုက်ထည့်ပါ (Optional)..."
+              className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-medium focus:border-blue-600 focus:outline-none transition"
             />
           </div>
 
           {/* Body Paragraphs List */}
           <div className="space-y-2">
-            <label className="block text-[11px] font-bold text-slate-700">
+            <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400">
               အကြောင်းအရာ အပြည့်အစုံ စာပိုဒ်များ
             </label>
             {formInput.bodyParagraphs.map((para, index) => (
@@ -1347,7 +1396,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                     newArr[index] = e.target.value;
                     setFormInput({ ...formInput, bodyParagraphs: newArr });
                   }}
-                  className="flex-1 bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 leading-relaxed focus:border-blue-900 focus:outline-none focus:bg-white transition font-medium"
+                  className="flex-1 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white leading-relaxed focus:border-blue-600 focus:outline-none transition font-medium"
                 />
                 <button
                   type="button"
@@ -1370,18 +1419,18 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                   bodyParagraphs: [...formInput.bodyParagraphs, `${nextIdx}။    `]
                 });
               }}
-              className="text-xs text-blue-900 font-extrabold hover:underline flex items-center gap-1 py-1"
+              className="text-xs text-blue-700 dark:text-blue-400 font-bold hover:underline flex items-center gap-1 py-1"
             >
               + စာပိုဒ်အသစ် ထပ်ထည့်မည်
             </button>
           </div>
 
           {/* 4 & 5. Signatory Title & Signatory Name Dropdowns */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-zinc-800">
             <div>
               <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
-                <label className="block text-[11px] font-bold text-slate-700">
-                  လက်မှတ်ထိုးသူ၏ ရာထူး (Signatory Title Dropdown)
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400">
+                  လက်မှတ်ထိုးသူ၏ ရာထူး
                 </label>
                 <select
                   value=""
@@ -1390,7 +1439,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                       setFormInput({ ...formInput, senderTitle: e.target.value });
                     }
                   }}
-                  className="text-[10px] bg-blue-50 text-blue-900 font-extrabold border border-blue-200 rounded-lg px-2 py-0.5 focus:outline-none cursor-pointer"
+                  className="text-[11px] bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-800 rounded-lg px-2.5 py-1 focus:outline-none cursor-pointer"
                 >
                   <option value="">▼ မာစတာဒေတာမှ ရွေးရန်</option>
                   {masterData.senderTitles.map((opt, i) => (
@@ -1404,15 +1453,15 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                 type="text"
                 value={formInput.senderTitle}
                 onChange={(e) => setFormInput({ ...formInput, senderTitle: e.target.value })}
-                placeholder="ရာထူး ရိုက်ထည့်ပါ ( e.g. မြို့နယ်ဦးစီးမှူး )..."
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:border-blue-900 focus:outline-none focus:bg-white transition"
+                placeholder="ရာထူး ရိုက်ထည့်ပါ..."
+                className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-semibold focus:border-blue-600 focus:outline-none transition"
               />
             </div>
 
             <div>
               <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
-                <label className="block text-[11px] font-bold text-slate-700">
-                  လက်မှတ်ထိုးသူ၏ အမည် (Signatory Name Dropdown)
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400">
+                  လက်မှတ်ထိုးသူ၏ အမည်
                 </label>
                 <select
                   value=""
@@ -1421,7 +1470,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                       setFormInput({ ...formInput, senderName: e.target.value });
                     }
                   }}
-                  className="text-[10px] bg-blue-50 text-blue-900 font-extrabold border border-blue-200 rounded-lg px-2 py-0.5 focus:outline-none cursor-pointer"
+                  className="text-[11px] bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-800 rounded-lg px-2.5 py-1 focus:outline-none cursor-pointer"
                 >
                   <option value="">▼ မာစတာဒေတာမှ ရွေးရန်</option>
                   {masterData.senderNames.map((opt, i) => (
@@ -1435,21 +1484,20 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                 type="text"
                 value={formInput.senderName}
                 onChange={(e) => setFormInput({ ...formInput, senderName: e.target.value })}
-                placeholder="အမည် ရိုက်ထည့်ပါ ( e.g. ဦးအောင်ကျော်မင်း )..."
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:border-blue-900 focus:outline-none focus:bg-white transition"
+                placeholder="အမည် ရိုက်ထည့်ပါ..."
+                className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white font-semibold focus:border-blue-600 focus:outline-none transition"
               />
             </div>
           </div>
 
-
-          {/* Copy To List (မိတ္တူကို-) */}
-          <div className="space-y-2 pt-2 border-t border-slate-100">
-            <label className="block text-[11px] font-bold text-slate-700">
-              မိတ္တူကို - (Copy To List)
+          {/* Copy To List */}
+          <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+            <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400">
+              မိတ္တူကို
             </label>
             {formInput.copyTo.map((item, idx) => (
               <div key={idx} className="flex gap-2 items-center">
-                <span className="text-xs font-bold text-slate-500 w-6 text-right shrink-0">
+                <span className="text-xs font-bold text-slate-500 dark:text-zinc-400 w-6 text-right shrink-0">
                   {toMyanmarDigits(idx + 1)}။
                 </span>
                 <input
@@ -1460,7 +1508,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                     newCopies[idx] = e.target.value;
                     setFormInput({ ...formInput, copyTo: newCopies });
                   }}
-                  className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 focus:border-blue-900 focus:outline-none focus:bg-white transition font-medium"
+                  className="flex-1 min-h-[40px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:border-blue-600 focus:outline-none transition font-medium"
                 />
                 <button
                   type="button"
@@ -1477,20 +1525,20 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
             <button
               type="button"
               onClick={() => setFormInput({ ...formInput, copyTo: [...formInput.copyTo, ''] })}
-              className="text-xs text-blue-900 font-extrabold hover:underline flex items-center gap-1 py-1"
+              className="text-xs text-blue-700 dark:text-blue-400 font-bold hover:underline flex items-center gap-1 py-1"
             >
               + မိတ္တူပေးပို့ရန်နေရာ ထပ်ထည့်မည်
             </button>
           </div>
 
           {/* Submit Action Button */}
-          <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 flex flex-wrap items-center justify-end gap-3">
             <button
               type="button"
               onClick={() => setActiveTab('preview')}
-              className="px-5 py-2.5 rounded-xl bg-blue-900 hover:bg-blue-800 text-white font-extrabold text-xs shadow-2xs"
+              className="min-h-[44px] px-5 py-2.5 rounded-2xl bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs ios-press"
             >
-              ရုံးစာ ပုံစံ စစ်ဆေးမည် (Auto Format Preview) →
+              ရုံးစာ ပုံစံ ကြည့်မည် →
             </button>
           </div>
         </div>
@@ -1498,132 +1546,127 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
         /* Preview Official Document Letter Card (Exact Match to Official Myanmar Letter Layout) */
         <div className="space-y-4">
           {/* Action Toolbar */}
-          <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-2xl bg-white border border-slate-200 shadow-xs">
+          <div className="ios-grouped-card flex flex-wrap items-center justify-between gap-2 p-3">
             <div className="flex flex-wrap items-center gap-2">
-              {/* PDF Download Button */}
               <button
+                type="button"
                 onClick={handleDownloadPDF}
                 disabled={isGeneratingPdf}
-                className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs flex items-center gap-1.5 transition shadow-2xs disabled:opacity-50 cursor-pointer"
-                title="A4 PDF ဖိုင်အဖြစ် ဒေါင်းလုဒ် ရယူမည်"
+                className="min-h-[40px] px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 transition disabled:opacity-50 ios-press"
               >
                 {isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                 <span>{isGeneratingPdf ? 'PDF ပြုလုပ်နေသည်...' : 'PDF ရယူရန်'}</span>
               </button>
 
-              {/* Share to Viber Button */}
               <button
+                type="button"
                 onClick={handleShareViber}
                 disabled={isSharing}
-                className="px-3.5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-xs flex items-center gap-1.5 transition shadow-2xs disabled:opacity-50 cursor-pointer"
-                title="Viber သို့ စာနှင့် ပုံစံတိုက်ရိုက်ပေးပို့မည်"
+                className="min-h-[40px] px-3.5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs flex items-center gap-1.5 transition disabled:opacity-50 ios-press"
               >
                 {isSharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                <span>{isSharing ? 'မျှဝေနေသည်...' : 'ဗိုင်ဘာသို့ ပို့မည်'}</span>
+                <span>{isSharing ? 'မျှဝေနေသည်...' : 'ဗိုင်ဘာသို့'}</span>
               </button>
 
-              {/* Print Button */}
               <button
+                type="button"
                 onClick={handlePrint}
-                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1.5 transition border border-slate-300"
+                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-100 font-bold text-xs flex items-center gap-1.5 transition"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>ပရင့်ရိုက်မည်</span>
+                <span>ပရင့်</span>
               </button>
 
-              {/* Page Size Selector Dropdown (A4 / Legal) */}
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
-                <span className="font-bold text-slate-700 px-1 text-[11px]">စာရွက်:</span>
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-zinc-800 p-1 rounded-xl text-xs">
                 <select
                   value={pageSize}
                   onChange={(e) => setPageSize(e.target.value as 'A4' | 'LEGAL')}
-                  className="bg-white border border-slate-300 rounded-lg px-2 py-1 font-extrabold text-xs text-blue-950 focus:outline-none"
+                  className="bg-white dark:bg-zinc-700 border border-slate-200 dark:border-zinc-600 rounded-lg px-2 py-1 font-bold text-xs text-slate-900 dark:text-white focus:outline-none"
                 >
-                  <option value="A4">A4 Size</option>
-                  <option value="LEGAL">Legal Size</option>
+                  <option value="A4">A4</option>
+                  <option value="LEGAL">Legal</option>
                 </select>
               </div>
 
-              {/* Live Margin Adjustments Button */}
               <button
+                type="button"
                 onClick={() => setShowMarginSettings(!showMarginSettings)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition border ${
+                className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
                   showMarginSettings
-                    ? 'bg-blue-900 text-white border-blue-900 shadow-2xs'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300'
+                    ? 'bg-blue-700 text-white'
+                    : 'bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-100'
                 }`}
-                title="စာရွက် အနားသတ် ဘောင်များ (Live Margins) ချိန်ညှိမည်"
               >
                 <Sliders className="w-3.5 h-3.5" />
-                <span>ဘောင်များ ချိန်ညှိမည်</span>
+                <span>ဘောင်များ</span>
               </button>
 
-              {/* Mobile Screen Fit Mode Selector Dropdown */}
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
-                <span className="font-bold text-slate-700 px-1 text-[11px]">စခရင်:</span>
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-zinc-800 p-1 rounded-xl text-xs">
                 <select
                   value={zoomFit ? 'FIT' : '100%'}
                   onChange={(e) => setZoomFit(e.target.value === 'FIT')}
-                  className="bg-white border border-slate-300 rounded-lg px-2 py-1 font-extrabold text-xs text-blue-950 focus:outline-none"
+                  className="bg-white dark:bg-zinc-700 border border-slate-200 dark:border-zinc-600 rounded-lg px-2 py-1 font-bold text-xs text-slate-900 dark:text-white focus:outline-none"
                 >
-                  <option value="FIT">Fit View (ဖုန်းစခရင်)</option>
-                  <option value="100%">100% View (မူရင်း)</option>
+                  <option value="FIT">Fit View</option>
+                  <option value="100%">100%</option>
                 </select>
               </div>
 
               <button
+                type="button"
                 onClick={handleCopyText}
-                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1.5 transition border border-slate-300"
+                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-800 dark:text-zinc-100 font-bold text-xs flex items-center gap-1.5 transition"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? 'ကူးယူပြီး' : 'စာသား ကူးယူမည်'}</span>
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copied ? 'ကူးယူပြီး' : 'ကူးယူ'}</span>
               </button>
             </div>
 
             <button
+              type="button"
               onClick={handleSaveRecord}
-              className="px-4 py-2 rounded-xl bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-sm"
+              className="min-h-[40px] px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 transition ios-press"
             >
-              {savedSuccess ? <Check className="w-4 h-4 text-white" /> : <Save className="w-4 h-4 text-white" />}
-              <span>{savedSuccess ? 'မှတ်တမ်းသို့ သိမ်းဆည်းပြီး' : 'မှတ်တမ်းတွင် သိမ်းမည်'}</span>
+              {savedSuccess ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+              <span>{savedSuccess ? 'သိမ်းဆည်းပြီး' : 'မှတ်တမ်းသိမ်းမည်'}</span>
             </button>
           </div>
 
           {/* Interactive Live Margins Control Panel */}
           {showMarginSettings && (
-            <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-3 animate-in fade-in text-slate-900">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+            <div className="ios-grouped-card p-4 space-y-3 animate-in fade-in text-slate-900 dark:text-zinc-100">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-zinc-800 pb-2">
                 <div className="flex items-center gap-2">
-                  <Sliders className="w-4 h-4 text-blue-900" />
-                  <span className="text-xs font-extrabold text-slate-900">
-                    စာရွက် အနားသတ် ဘောင်များ တိုက်ရိုက်ချိန်ညှိခြင်း (Live Margin Adjustments)
+                  <Sliders className="w-4 h-4 text-blue-700 dark:text-blue-400" />
+                  <span className="text-xs font-extrabold">
+                    စာရွက် အနားသတ် ဘောင်များ (Live Margin Adjustments)
                   </span>
                 </div>
-                <div className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
-                  Top: {marginTop}" | Bottom: {marginBottom}" | Left: {marginLeft}" | Right: {marginRight}"
+                <div className="text-[11px] font-semibold text-slate-600 dark:text-zinc-400 font-mono">
+                  Top: {marginTop}" · Bottom: {marginBottom}" · Left: {marginLeft}" · Right: {marginRight}"
                 </div>
               </div>
 
               {/* Default Reset Button */}
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-700">
-                  မူလ သတ်မှတ်ထားသော ဘောင်အချိုး (Default Margin View):
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold text-slate-600 dark:text-zinc-400">
+                  Default ဘောင်အချိုး:
                 </span>
                 <button
                   type="button"
                   onClick={() => { setMarginTop(0.25); setMarginBottom(0.25); setMarginLeft(1.0); setMarginRight(0.25); }}
-                  className="px-2.5 py-1 rounded-xl text-xs font-bold bg-blue-900 text-white border border-blue-900 shadow-2xs hover:bg-blue-800 transition"
+                  className="min-h-[36px] px-3 py-1 rounded-xl text-xs font-bold bg-blue-700 hover:bg-blue-800 text-white transition"
                 >
-                  Default (Top: 0.25", Bottom: 0.25", Left: 1", Right: 0.25")
+                  Reset Default (0.25" / 1")
                 </button>
               </div>
 
-              {/* Live Sliders & Fine Tuning Controls */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              {/* Live Sliders */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-zinc-900/80 p-3 rounded-2xl border border-slate-200 dark:border-zinc-800">
                 <div className="space-y-1">
-                  <div className="flex justify-between items-center text-[11px] font-bold text-slate-800">
+                  <div className="flex justify-between items-center text-[11px] font-bold text-slate-700 dark:text-zinc-300">
                     <span>အပေါ် (Top)</span>
-                    <span className="text-blue-900 font-mono font-extrabold">{marginTop}"</span>
+                    <span className="text-blue-700 dark:text-blue-400 font-mono">{marginTop}"</span>
                   </div>
                   <input
                     type="range"
@@ -1632,14 +1675,14 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                     step="0.05"
                     value={marginTop}
                     onChange={(e) => setMarginTop(parseFloat(e.target.value))}
-                    className="w-full accent-blue-900 cursor-pointer"
+                    className="w-full accent-blue-700 cursor-pointer"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <div className="flex justify-between items-center text-[11px] font-bold text-slate-800">
+                  <div className="flex justify-between items-center text-[11px] font-bold text-slate-700 dark:text-zinc-300">
                     <span>အောက် (Bottom)</span>
-                    <span className="text-blue-900 font-mono font-extrabold">{marginBottom}"</span>
+                    <span className="text-blue-700 dark:text-blue-400 font-mono">{marginBottom}"</span>
                   </div>
                   <input
                     type="range"
@@ -1648,14 +1691,14 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                     step="0.05"
                     value={marginBottom}
                     onChange={(e) => setMarginBottom(parseFloat(e.target.value))}
-                    className="w-full accent-blue-900 cursor-pointer"
+                    className="w-full accent-blue-700 cursor-pointer"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <div className="flex justify-between items-center text-[11px] font-bold text-slate-800">
+                  <div className="flex justify-between items-center text-[11px] font-bold text-slate-700 dark:text-zinc-300">
                     <span>ဘယ် (Left)</span>
-                    <span className="text-blue-900 font-mono font-extrabold">{marginLeft}"</span>
+                    <span className="text-blue-700 dark:text-blue-400 font-mono">{marginLeft}"</span>
                   </div>
                   <input
                     type="range"
@@ -1664,14 +1707,14 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                     step="0.05"
                     value={marginLeft}
                     onChange={(e) => setMarginLeft(parseFloat(e.target.value))}
-                    className="w-full accent-blue-900 cursor-pointer"
+                    className="w-full accent-blue-700 cursor-pointer"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <div className="flex justify-between items-center text-[11px] font-bold text-slate-800">
+                  <div className="flex justify-between items-center text-[11px] font-bold text-slate-700 dark:text-zinc-300">
                     <span>ညာ (Right)</span>
-                    <span className="text-blue-900 font-mono font-extrabold">{marginRight}"</span>
+                    <span className="text-blue-700 dark:text-blue-400 font-mono">{marginRight}"</span>
                   </div>
                   <input
                     type="range"
@@ -1680,7 +1723,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                     step="0.05"
                     value={marginRight}
                     onChange={(e) => setMarginRight(parseFloat(e.target.value))}
-                    className="w-full accent-blue-900 cursor-pointer"
+                    className="w-full accent-blue-700 cursor-pointer"
                   />
                 </div>
               </div>
@@ -1720,9 +1763,9 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
           `}</style>
 
           {/* Scrollable & Auto-Scaling Preview Paper Container for Mobile Screen Fit */}
-          <div 
+          <div
             ref={containerRef}
-            className="w-full overflow-x-auto bg-slate-200/50 p-2 sm:p-4 rounded-2xl border border-slate-300 flex justify-center items-start min-h-[450px]"
+            className="w-full overflow-x-auto bg-slate-200/70 dark:bg-zinc-900/90 p-2 sm:p-4 rounded-3xl border border-slate-300 dark:border-zinc-800 flex justify-center items-start min-h-[450px]"
           >
             <div
               style={{
@@ -1940,23 +1983,113 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
         </div>
       )}
 
+      {/* Save Current Form as Preset Prompt Modal (replaces window.prompt/alert) */}
+      {showSavePresetPromptModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-md animate-in fade-in">
+          <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-6 shadow-2xl space-y-4 text-slate-900 dark:text-zinc-100">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-extrabold flex items-center gap-2">
+                <BookmarkCheck className="w-4 h-4 text-blue-700 dark:text-blue-400" />
+                <span>Preset စာပုံစံ အသစ်သိမ်းမည်</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowSavePresetPromptModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={submitSaveCurrentAsPreset} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
+                  Preset စာခေါင်းစဉ် *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={savePresetPromptTitle}
+                  onChange={(e) => setSavePresetPromptTitle(e.target.value)}
+                  placeholder="ခေါင်းစဉ် ရိုက်ထည့်ပါ..."
+                  className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-semibold focus:border-blue-600 focus:outline-none"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowSavePresetPromptModal(false)}
+                  className="min-h-[40px] px-4 py-2 rounded-2xl bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-bold"
+                >
+                  မလုပ်တော့ပါ
+                </button>
+                <button
+                  type="submit"
+                  className="min-h-[40px] px-4 py-2 rounded-2xl bg-blue-700 hover:bg-blue-800 text-white font-bold"
+                >
+                  သိမ်းဆည်းမည်
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Preset Modal */}
+      {confirmDeletePresetId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-md animate-in fade-in">
+          <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-6 shadow-2xl space-y-4 text-slate-900 dark:text-zinc-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold">Preset ဖျက်ပစ်ရန်</h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                  ဤ Preset စာပုံစံအား ဖျက်ပစ်ရန် သေချာပါသလား။
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeletePresetId(null)}
+                className="min-h-[40px] px-4 py-2 rounded-2xl bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-bold text-xs"
+              >
+                မလုပ်တော့ပါ
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeletePreset}
+                className="min-h-[40px] px-4 py-2 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs"
+              >
+                ဖျက်ပစ်မည်
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit / New Preset Management Modal */}
       {showPresetManagerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 p-5 shadow-2xl space-y-4 text-slate-900 max-h-[90vh] overflow-y-auto relative">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <BookmarkCheck className="w-4 h-4 text-blue-900" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-md animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-6 shadow-2xl space-y-4 text-slate-900 dark:text-zinc-100 max-h-[90vh] overflow-y-auto relative">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <h3 className="text-sm font-extrabold flex items-center gap-2">
+                <BookmarkCheck className="w-4 h-4 text-blue-700 dark:text-blue-400" />
                 <span>{editingPreset ? 'Preset စာပုံစံ ပြင်ဆင်ခြင်း' : 'Preset စာပုံစံ အသစ်တိုးခြင်း'}</span>
               </h3>
-              <button onClick={() => setShowPresetManagerModal(false)} className="text-slate-400 hover:text-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowPresetManagerModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 flex items-center justify-center"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleSavePresetForm} className="space-y-3 text-xs">
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
                   Preset စာခေါင်းစဉ် (Title)
                 </label>
                 <input
@@ -1964,13 +2097,13 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                   required
                   value={presetTitleInput}
                   onChange={(e) => setPresetTitleInput(e.target.value)}
-                  placeholder="e.g. ရုံးစာ (အပေါ်စာ)၊ ကြေးနန်းစာ၊ စိစစ်ပြန်ကြားစာ..."
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-bold focus:border-blue-900 focus:outline-none"
+                  placeholder="e.g. ရုံးစာ (အပေါ်စာ)၊ စိစစ်ပြန်ကြားစာ..."
+                  className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-semibold focus:border-blue-600 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
                   အကြောင်းအရာ (Subject)
                 </label>
                 <input
@@ -1978,12 +2111,12 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                   value={presetSubjectInput}
                   onChange={(e) => setPresetSubjectInput(e.target.value)}
                   placeholder="e.g. ဖြေရှင်းတင်ပြရန်ကိစ္စ..."
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-bold focus:border-blue-900 focus:outline-none"
+                  className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-semibold focus:border-blue-600 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
                   ရည်ညွှန်းချက် (Reference)
                 </label>
                 <input
@@ -1991,19 +2124,19 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                   value={presetRefInput}
                   onChange={(e) => setPresetRefInput(e.target.value)}
                   placeholder="e.g. ကြေးနန်းအမှတ်၊ ၁၆၅/လဝက..."
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-medium focus:border-blue-900 focus:outline-none"
+                  className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-medium focus:border-blue-600 focus:outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    လက်မှတ်ထိုးသူ ရာထူး (Preset)
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
+                    လက်မှတ်ထိုးသူ ရာထူး
                   </label>
                   <select
                     value={presetSenderTitleInput}
                     onChange={(e) => setPresetSenderTitleInput(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-bold focus:border-blue-900 focus:outline-none"
+                    className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-semibold focus:border-blue-600 focus:outline-none"
                   >
                     {SENDER_TITLE_OPTIONS.filter(o => o !== 'CUSTOM').map((opt, i) => (
                       <option key={i} value={opt}>{opt}</option>
@@ -2011,24 +2144,21 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    လက်မှတ်ထိုးသူ အမည် (Preset)
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
+                    လက်မှတ်ထိုးသူ အမည်
                   </label>
-                  <select
+                  <input
+                    type="text"
                     value={presetSenderNameInput}
                     onChange={(e) => setPresetSenderNameInput(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-bold focus:border-blue-900 focus:outline-none"
-                  >
-                    {SENDER_NAME_OPTIONS.filter(o => o !== 'CUSTOM').map((opt, i) => (
-                      <option key={i} value={opt}>{opt}</option>
-                    ))}
-                  </select>
+                    className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-semibold focus:border-blue-600 focus:outline-none"
+                  />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="block text-[11px] font-bold text-slate-700">
-                  Preset စာပိုဒ်အတိအကျများ
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400">
+                  Preset စာပိုဒ်များ
                 </label>
                 {presetParagraphs.map((para, idx) => (
                   <div key={idx} className="flex gap-2 items-start">
@@ -2040,12 +2170,12 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                         updated[idx] = e.target.value;
                         setPresetParagraphs(updated);
                       }}
-                      className="flex-1 bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs text-slate-900 focus:border-blue-900 focus:outline-none font-medium"
+                      className="flex-1 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl p-2 text-xs text-slate-900 dark:text-white focus:border-blue-600 focus:outline-none font-medium"
                     />
                     <button
                       type="button"
                       onClick={() => setPresetParagraphs(presetParagraphs.filter((_, i) => i !== idx))}
-                      className="text-slate-400 hover:text-rose-600 p-1 text-xs font-bold"
+                      className="text-slate-400 hover:text-rose-600 p-1.5 text-xs font-bold"
                     >
                       ✕
                     </button>
@@ -2054,15 +2184,15 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                 <button
                   type="button"
                   onClick={() => setPresetParagraphs([...presetParagraphs, `${toMyanmarDigits(presetParagraphs.length + 1)}။    `])}
-                  className="text-xs text-blue-900 font-bold hover:underline"
+                  className="text-xs text-blue-700 dark:text-blue-400 font-bold hover:underline"
                 >
                   + စာပိုဒ်အသစ် ထည့်မည်
                 </button>
               </div>
 
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                <label className="block text-[11px] font-bold text-slate-700">
-                  မိတ္တူကို - (Preset စာရင်း)
+              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400">
+                  မိတ္တူကို
                 </label>
                 {presetCopyTo.map((c, idx) => (
                   <div key={idx} className="flex gap-2 items-center">
@@ -2077,7 +2207,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                         updated[idx] = e.target.value;
                         setPresetCopyTo(updated);
                       }}
-                      className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-medium focus:border-blue-900 focus:outline-none"
+                      className="flex-1 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white font-medium focus:border-blue-600 focus:outline-none"
                     />
                     <button
                       type="button"
@@ -2091,7 +2221,7 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                 <button
                   type="button"
                   onClick={() => setPresetCopyTo([...presetCopyTo, ''])}
-                  className="text-xs text-blue-900 font-bold hover:underline"
+                  className="text-xs text-blue-700 dark:text-blue-400 font-bold hover:underline"
                 >
                   + မိတ္တူ ထပ်ထည့်မည်
                 </button>
@@ -2101,13 +2231,13 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                 <button
                   type="button"
                   onClick={() => setShowPresetManagerModal(false)}
-                  className="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold border border-slate-200"
+                  className="min-h-[40px] px-4 py-2 rounded-2xl bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 font-bold"
                 >
                   မလုပ်တော့ပါ
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-blue-900 text-white font-bold hover:bg-blue-800 shadow-xs"
+                  className="min-h-[40px] px-5 py-2 rounded-2xl bg-blue-700 hover:bg-blue-800 text-white font-bold"
                 >
                   Preset သိမ်းဆည်းမည်
                 </button>
@@ -2117,30 +2247,33 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
         </div>
       )}
 
-      {/* Location Settings Modal ("ဆက်တင် ပုံစံမျိုး") */}
+      {/* Location Settings Modal */}
       {showLocationModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-md rounded-2xl bg-white border border-slate-200 p-5 shadow-2xl space-y-4 text-slate-900 relative">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Settings2 className="w-4 h-4 text-blue-900" />
-                <span>ရုံးတည်နေရာ တိုင်း/ခရိုင်/မြို့နယ် ဆက်တင်</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-md animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-6 shadow-2xl space-y-4 text-slate-900 dark:text-zinc-100 relative">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <h3 className="text-sm font-extrabold flex items-center gap-2">
+                <Settings2 className="w-4 h-4 text-blue-700 dark:text-blue-400" />
+                <span>ရုံးတည်နေရာ ဆက်တင်</span>
               </h3>
-              <button onClick={() => setShowLocationModal(false)} className="text-slate-400 hover:text-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowLocationModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 flex items-center justify-center"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="space-y-3 text-xs">
-              {/* Region / State Selector */}
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  ၁။ တိုင်းဒေသကြီး / ပြည်နယ် / ပြည်ထောင်စုနယ်မြေ
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
+                  ၁။ တိုင်းဒေသကြီး / ပြည်နယ်
                 </label>
                 <select
                   value={selectedRegionId}
                   onChange={(e) => handleRegionChange(e.target.value)}
-                  className="w-full bg-slate-50 text-slate-900 font-bold text-xs rounded-xl px-3 py-2 border border-slate-300 focus:border-blue-900 focus:outline-none"
+                  className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 text-slate-900 dark:text-white font-semibold text-xs rounded-xl px-3 py-2 border border-slate-200 dark:border-zinc-700 focus:border-blue-600 focus:outline-none"
                 >
                   {MYANMAR_ADMINISTRATIVE_DATA.map((r) => (
                     <option key={r.id} value={r.id}>
@@ -2150,15 +2283,14 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                 </select>
               </div>
 
-              {/* District Selector */}
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  ၂။ ခရိုင် ရွေးချယ်ရန်
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
+                  ၂။ ခရိုင်
                 </label>
                 <select
                   value={selectedDistrictId}
                   onChange={(e) => handleDistrictChange(e.target.value)}
-                  className="w-full bg-slate-50 text-slate-900 font-bold text-xs rounded-xl px-3 py-2 border border-slate-300 focus:border-blue-900 focus:outline-none"
+                  className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 text-slate-900 dark:text-white font-semibold text-xs rounded-xl px-3 py-2 border border-slate-200 dark:border-zinc-700 focus:border-blue-600 focus:outline-none"
                 >
                   {currentDistricts.map((d) => (
                     <option key={d.id} value={d.id}>
@@ -2168,15 +2300,14 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                 </select>
               </div>
 
-              {/* Township Selector */}
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  ၃။ မြို့နယ် ရွေးချယ်ရန်
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 mb-1">
+                  ၃။ မြို့နယ်
                 </label>
                 <select
                   value={selectedTownshipId}
                   onChange={(e) => handleTownshipChange(e.target.value)}
-                  className="w-full bg-slate-50 text-slate-900 font-bold text-xs rounded-xl px-3 py-2 border border-slate-300 focus:border-blue-900 focus:outline-none"
+                  className="w-full min-h-[42px] bg-slate-50 dark:bg-zinc-800 text-slate-900 dark:text-white font-semibold text-xs rounded-xl px-3 py-2 border border-slate-200 dark:border-zinc-700 focus:border-blue-600 focus:outline-none"
                 >
                   {currentTownships.map((t) => (
                     <option key={t.id} value={t.id}>
@@ -2186,9 +2317,9 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                 </select>
               </div>
 
-              <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 text-[11px] font-bold text-blue-950 flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>လက်ရှိ ရွေးချယ်မှု: {findTownshipLocationInfo(selectedTownshipId).fullLocationMM}</span>
+              <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900 text-[11px] font-bold text-blue-900 dark:text-blue-200 flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>{findTownshipLocationInfo(selectedTownshipId).fullLocationMM}</span>
               </div>
 
               <div className="pt-2 flex justify-end gap-2">
@@ -2201,11 +2332,12 @@ ${formInput.classification !== 'NONE' ? getClassificationLabel(formInput.classif
                       townshipId: selectedTownshipId
                     });
                     setShowLocationModal(false);
+                    showToast('ရုံးတည်နေရာ သိမ်းဆည်းပြီးပါပြီ။');
                   }}
-                  className="px-4 py-2 rounded-xl bg-blue-900 text-white font-bold hover:bg-blue-800 shadow-xs text-xs flex items-center gap-1.5"
+                  className="min-h-[42px] px-5 py-2 rounded-2xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center gap-1.5"
                 >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>ပိတ်၍ ပုံသေသိမ်းမည် (Save & Close)</span>
+                  <Check className="w-4 h-4" />
+                  <span>သိမ်းဆည်း၍ ပိတ်မည်</span>
                 </button>
               </div>
             </div>

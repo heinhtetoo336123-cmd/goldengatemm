@@ -14,42 +14,41 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   onTabChange,
   pendingSyncCount = 0
 }) => {
-  const tabs = [
+  const tabs: { id: TabType; label: string; icon: typeof Home; badge?: number }[] = [
     { id: 'dashboard', label: 'ပင်မ', icon: Home },
-    { id: 'letter', label: 'ရုံးစာရေးသား', icon: FileText },
-    { id: 'apply', label: 'လျှောက်လွှာဇုန်', icon: QrCode },
-    { id: 'records', label: 'မှတ်တမ်းများ', icon: FolderArchive, badge: pendingSyncCount },
-    { id: 'legal', label: 'ဥပဒေရှာဖွေ', icon: Scale },
+    { id: 'letter', label: 'ရုံးစာ', icon: FileText },
+    { id: 'apply', label: 'လျှောက်လွှာ', icon: QrCode },
+    { id: 'records', label: 'မှတ်တမ်း', icon: FolderArchive, badge: pendingSyncCount },
+    { id: 'legal', label: 'ဥပဒေ', icon: Scale },
     { id: 'auth', label: 'အကောင့်', icon: ShieldCheck }
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-2 py-1.5 pb-safe shadow-lg">
-      <div className="max-w-lg mx-auto grid grid-cols-6 items-center">
-
+    <nav
+      aria-label="Mobile Navigation"
+      className="md:hidden fixed bottom-2.5 left-2.5 right-2.5 z-40 pb-safe no-print"
+    >
+      <div className="max-w-md mx-auto ios-liquid-glass border border-slate-900/10 dark:border-white/15 rounded-[28px] px-1.5 py-1.5 grid grid-cols-6 items-center">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
-              onClick={() => onTabChange(tab.id as TabType)}
-              className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-all relative ${
+              type="button"
+              onClick={() => onTabChange(tab.id)}
+              className={`min-h-[46px] flex flex-col items-center justify-center py-1 px-0.5 rounded-[22px] transition-all relative ios-press cursor-pointer ${
                 isActive
-                  ? 'text-blue-950 font-black'
-                  : 'text-slate-500 hover:text-slate-900 font-semibold'
+                  ? 'bg-[#0055D4]/12 dark:bg-blue-500/20 text-[#0055D4] dark:text-blue-400 font-bold'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
               }`}
             >
-              <div className={`p-1 rounded-lg transition ${
-                isActive ? 'bg-blue-100 text-blue-950' : ''
-              }`}>
-                <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
-              </div>
-              <span className="text-[10px] tracking-tight mt-0.5 whitespace-nowrap font-bold">
+              <Icon className={`w-[19px] h-[19px] ${isActive ? 'stroke-[2.4]' : 'stroke-[1.9]'}`} />
+              <span className="text-[10px] tracking-tight mt-0.5 whitespace-nowrap leading-none">
                 {tab.label}
               </span>
               {tab.badge && tab.badge > 0 ? (
-                <span className="absolute top-1 right-2 w-4 h-4 rounded-full bg-blue-900 text-white text-[9px] font-black flex items-center justify-center shadow-2xs">
+                <span className="absolute top-1 right-2 w-4 h-4 rounded-full bg-[#0055D4] text-white text-[9px] font-bold flex items-center justify-center tabular-nums">
                   {tab.badge}
                 </span>
               ) : null}

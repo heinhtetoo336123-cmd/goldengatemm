@@ -171,7 +171,8 @@ export type ApplicationType =
 export interface ApplicationLink {
   id: string;
   token: string;              // e.g. APP-2026-X89K2
-  officerId: string;         // e.g. usr-101 / officer email
+  officerId: string;         // Firebase Auth UID of issuing officer
+  officerEmail?: string;     // Verified email of issuing officer
   officerName: string;       // e.g. Hein Htet Oo
   officerBadge: string;      // e.g. IMM-2026
   officerStation: string;    // e.g. မင်္ဂလာဒုံမြို့နယ် ရုံး
@@ -182,6 +183,14 @@ export interface ApplicationLink {
   expiresAt: string;
   status: 'ACTIVE' | 'EXPIRED' | 'REVOKED';
   submissionCount: number;
+}
+
+export interface AuthorizedOfficer {
+  email: string;
+  role: UserRole;
+  active: boolean;
+  addedBy?: string;
+  createdAt?: string;
 }
 
 export type ApplicationSubmissionStatus = 
