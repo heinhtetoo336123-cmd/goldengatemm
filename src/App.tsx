@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged, getRedirectResult, signOut, type User as FirebaseUser } from 'firebase/auth';
 import { ShieldCheck } from 'lucide-react';
 import { Header } from './components/Header';
 import { BottomNav, TabType } from './components/BottomNav';
@@ -14,13 +14,14 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { GoogleOAuthGuideModal } from './components/GoogleOAuthGuideModal';
 import { User, DocumentRecord } from './types';
 import { db } from './services/db';
-import { auth, isFirebaseConfigured, testFirestoreConnection } from './services/firebase';
+import { auth, isFirebaseConfigured, testFirestoreConnection, formatFirebaseAuthError } from './services/firebase';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState<boolean>(false);
   const [unauthorizedGateEmail, setUnauthorizedGateEmail] = useState<string | null>(null);
+  const [gateAuthError, setGateAuthError] = useState<string | null>(null);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [showOAuthGuide, setShowOAuthGuide] = useState(false);
   const [applyTokenParam, setApplyTokenParam] = useState<string | null>(null);
@@ -48,49 +49,91 @@ export default function App() {
 
     testFirestoreConnection();
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser && firebaseUser.email) {
-        if (!firebaseUser.emailVerified) {
-          if (auth) await signOut(auth).catch(() => {});
-          db.setCurrentUser(null);
-          setCurrentUser(null);
-          setAuthReady(true);
-          return;
-        }
+    let isMounted = true;
+    let unsubscribe: (() => void) | undefined;
 
-        const authz = await db.checkOfficerAuthorizedAsync(firebaseUser.email);
-        if (authz.authorized) {
-          const verifiedUser: User = {
-            id: firebaseUser.uid,
-            name: firebaseUser.displayName || 'အရာရှိ',
-            email: firebaseUser.email.toLowerCase(),
-            role: authz.role,
-            badgeNumber: `IMM-${firebaseUser.uid.slice(0, 6).toUpperCase()}`,
-            department: 'လူဝင်မှုကြီးကြပ်ရေး ဦးစီးဌာန',
-            station: 'မြို့နယ်ဦးစီးမှူးရုံး',
-            isPreApproved: true
-          };
-          db.setCurrentUser(verifiedUser);
-          setCurrentUser(verifiedUser);
-          setUnauthorizedGateEmail(null);
-          setDocuments(db.getDocuments());
-        } else {
-          if (auth) await signOut(auth).catch(() => {});
-          db.setCurrentUser(null);
-          setCurrentUser(null);
-          setUnauthorizedGateEmail(firebaseUser.email);
-        }
-      } else {
+    const verifyAndApplyFirebaseUser = async (firebaseUser: FirebaseUser) => {
+      if (!firebaseUser.email || !firebaseUser.emailVerified) {
+        if (auth) await signOut(auth).catch(() => {});
+        if (!isMounted) return;
         db.setCurrentUser(null);
         setCurrentUser(null);
+        setGateAuthError('Email Verified မဖြစ်သေးပါ။');
+        return;
       }
-      setAuthReady(true);
-    });
 
-    return () => unsubscribe();
+      const authz = await db.checkOfficerAuthorizedAsync(firebaseUser.email);
+      if (!isMounted) return;
+      if (authz.authorized) {
+        const verifiedUser: User = {
+          id: firebaseUser.uid,
+          name: firebaseUser.displayName || 'အရာရှိ',
+          email: firebaseUser.email.toLowerCase(),
+          role: authz.role,
+          badgeNumber: `IMM-${firebaseUser.uid.slice(0, 6).toUpperCase()}`,
+          department: 'လူဝင်မှုကြီးကြပ်ရေး ဦးစီးဌာန',
+          station: 'မြို့နယ်ဦးစီးမှူးရုံး',
+          isPreApproved: true
+        };
+        db.setCurrentUser(verifiedUser);
+        setCurrentUser(verifiedUser);
+        setUnauthorizedGateEmail(null);
+        setGateAuthError(null);
+        setDocuments(db.getDocuments());
+      } else {
+        if (auth) await signOut(auth).catch(() => {});
+        if (!isMounted) return;
+        db.setCurrentUser(null);
+        setCurrentUser(null);
+        setUnauthorizedGateEmail(firebaseUser.email);
+      }
+    };
+
+    const initAuth = async () => {
+      if (!auth) return;
+      try {
+        const redirectResult = await getRedirectResult(auth);
+        if (!isMounted) return;
+        if (redirectResult?.user) {
+          await verifyAndApplyFirebaseUser(redirectResult.user);
+        }
+      } catch (err: unknown) {
+        if (!isMounted) return;
+        setGateAuthError(formatFirebaseAuthError(err));
+      }
+
+      if (!isMounted || !auth) return;
+
+      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        if (!isMounted) return;
+        try {
+          if (firebaseUser) {
+            await verifyAndApplyFirebaseUser(firebaseUser);
+          } else {
+            db.setCurrentUser(null);
+            setCurrentUser(null);
+          }
+        } catch (err: unknown) {
+          if (isMounted) {
+            setGateAuthError(formatFirebaseAuthError(err));
+          }
+        } finally {
+          if (isMounted) setAuthReady(true);
+        }
+      });
+    };
+
+    initAuth();
+
+    return () => {
+      isMounted = false;
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   const handleLogin = (user: User) => {
+    setGateAuthError(null);
+    setUnauthorizedGateEmail(null);
     setCurrentUser(user);
     setDocuments(db.getDocuments());
     setActiveTab('dashboard');
@@ -102,6 +145,8 @@ export default function App() {
     }
     db.setCurrentUser(null);
     setCurrentUser(null);
+    setGateAuthError(null);
+    setUnauthorizedGateEmail(null);
     setActiveTab('dashboard');
   };
 
@@ -153,6 +198,7 @@ export default function App() {
           onToggleTheme={toggleTheme}
           onOpenGoogleOAuthGuide={() => setShowOAuthGuide(true)}
           initialUnauthorizedEmail={unauthorizedGateEmail}
+          initialAuthError={gateAuthError}
           isGateMode={true}
         />
         <GoogleOAuthGuideModal

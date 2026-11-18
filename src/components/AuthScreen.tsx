@@ -15,10 +15,17 @@ import {
   KeyRound,
   ArrowRight
 } from 'lucide-react';
-import { GoogleAuthProvider, signInWithPopup, signInWithCredential, signOut } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithCredential, signOut } from 'firebase/auth';
 import { User, UserRole } from '../types';
 import { db } from '../services/db';
-import { auth, isFirebaseConfigured } from '../services/firebase';
+import { auth, isFirebaseConfigured, getFirebaseAuthErrorCode, formatFirebaseAuthError } from '../services/firebase';
+
+const POPUP_FALLBACK_CODES = new Set([
+  'auth/popup-blocked',
+  'auth/popup-closed-by-user',
+  'auth/cancelled-popup-request',
+  'auth/operation-not-supported-in-this-environment'
+]);
 
 interface AuthScreenProps {
   currentUser: User | null;
@@ -29,6 +36,7 @@ interface AuthScreenProps {
   onToggleTheme?: () => void;
   onOpenGoogleOAuthGuide?: () => void;
   initialUnauthorizedEmail?: string | null;
+  initialAuthError?: string | null;
   isGateMode?: boolean;
 }
 
@@ -40,14 +48,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   theme = 'light',
   onToggleTheme,
   onOpenGoogleOAuthGuide,
-  initialUnauthorizedEmail = null
+  initialUnauthorizedEmail = null,
+  initialAuthError = null
 }) => {
   const [preApprovedList, setPreApprovedList] = useState<string[]>([]);
   const [newEmail, setNewEmail] = useState('');
   const [newEmailRole, setNewEmailRole] = useState<UserRole>('OFFICER');
   const [accessRequested, setAccessRequested] = useState(false);
   const [unauthorizedEmail, setUnauthorizedEmail] = useState<string | null>(initialUnauthorizedEmail);
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(initialAuthError);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [adminStatusMsg, setAdminStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -57,6 +66,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   useEffect(() => {
     setUnauthorizedEmail(initialUnauthorizedEmail);
   }, [initialUnauthorizedEmail]);
+
+  useEffect(() => {
+    setAuthError(initialAuthError);
+  }, [initialAuthError]);
 
   useEffect(() => {
     if (currentUser?.role === 'ADMIN') {
@@ -214,9 +227,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     }
 
     setIsSigningIn(true);
+    let redirecting = false;
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+
     try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, provider);
       const email = result.user.email;
       if (!email) {
@@ -231,21 +246,23 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         result.user.emailVerified
       );
     } catch (err: unknown) {
-      const code =
-        typeof err === 'object' && err !== null && 'code' in err
-          ? String((err as { code: unknown }).code)
-          : '';
-      if (code === 'auth/popup-closed-by-user') {
-        setAuthError('Sign-In ပိတ်လိုက်ပါသည်။');
-      } else if (code === 'auth/operation-not-allowed') {
-        setAuthError('Firebase တွင် Google Auth ဖွင့်ရန် လိုအပ်ပါသည်။');
-      } else if (code === 'auth/unauthorized-domain') {
-        setAuthError('Domain ကို Firebase Authorized domains တွင် ထည့်ပါ။');
-      } else {
-        setAuthError('Sign-In မအောင်မြင်ပါ။');
+      const code = getFirebaseAuthErrorCode(err);
+      if (POPUP_FALLBACK_CODES.has(code)) {
+        try {
+          redirecting = true;
+          await signInWithRedirect(auth, provider);
+          return;
+        } catch (redirectErr: unknown) {
+          redirecting = false;
+          setAuthError(formatFirebaseAuthError(redirectErr));
+          return;
+        }
       }
+      setAuthError(formatFirebaseAuthError(err));
     } finally {
-      setIsSigningIn(false);
+      if (!redirecting) {
+        setIsSigningIn(false);
+      }
     }
   };
 
@@ -315,7 +332,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             {authError && (
               <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/70 text-amber-950 dark:text-amber-200 flex items-center gap-2 text-xs font-medium">
                 <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                <p className="flex-1">{authError}</p>
+                <p className="flex-1 break-words">{authError}</p>
               </div>
             )}
 

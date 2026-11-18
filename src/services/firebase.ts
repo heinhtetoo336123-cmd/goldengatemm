@@ -104,3 +104,31 @@ export async function testFirestoreConnection(): Promise<boolean> {
     return true;
   }
 }
+
+export function getFirebaseAuthErrorCode(err: unknown): string {
+  if (typeof err === 'object' && err !== null && 'code' in err) {
+    const code = (err as { code?: unknown }).code;
+    if (typeof code === 'string' && code.trim()) {
+      return code.trim();
+    }
+  }
+  return '';
+}
+
+export function formatFirebaseAuthError(err: unknown): string {
+  const code = getFirebaseAuthErrorCode(err);
+  if (code === 'auth/user-cancelled' || code === 'auth/redirect-cancelled-by-user') {
+    return `Sign-In ပိတ်လိုက်ပါသည်။ (${code})`;
+  }
+  if (code === 'auth/operation-not-allowed') {
+    return `Firebase တွင် Google Auth ဖွင့်ရန် လိုအပ်ပါသည် (${code})`;
+  }
+  if (code === 'auth/unauthorized-domain') {
+    return `Domain ကို Firebase Authorized domains တွင် ထည့်ပါ (${code})`;
+  }
+  if (code) {
+    return `Sign-In မအောင်မြင်ပါ (${code})`;
+  }
+  const msg = err instanceof Error ? err.message : '';
+  return msg ? `Sign-In မအောင်မြင်ပါ (${msg})` : 'Sign-In မအောင်မြင်ပါ။';
+}
